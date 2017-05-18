@@ -30,15 +30,28 @@ class axis:
             return eval(self.spi(device=self.arom_spi_name, method="SPI_read_byte").value)
 
 
-    def Reset(self):
-        ' Reset Axis and set default parameters for H-bridge '
+    def Reset(self, stall_th = 3500, ocd_th = 5000):
+        '''
+        Reset Axis and set default parameters for H-bridge
+
+        Keyword arguments:
+
+        stall_th -- Stall treshold value in mA (default: 3500)
+        ocd_th -- Over current treshold in mA (default: 5000)
+        '''
         self.writeByte(self.CS, 0xC0)      # reset
 
+        if stall_th > 4000:
+            stall_th = 4000
+
         self.writeByte(self.CS, 0x14)      # Stall Treshold setup
-        self.writeByte(self.CS, 0x70)      # 0x70 = 3.5A
+        self.writeByte(self.CS, int(stall_th/31.25)-1)      # 0x70 = 3.5A
         
+        if ocd_th > 6000:
+            ocd_th = 6000
+
         self.writeByte(self.CS, 0x13)      # Over Current Treshold setup 
-        self.writeByte(self.CS, 0x0A)      # 0x0A = 4A
+        self.writeByte(self.CS, int(ocd_th/375)-1)      # 0x0A = 4A
 
         self.writeByte(self.CS, 0x15)      # Full Step speed 
         self.writeByte(self.CS, 0xFF)
@@ -66,6 +79,10 @@ class axis:
         self.writeByte(self.CS, 0x10)
         self.writeByte(self.CS, 0x00)
 
+        #self.writeByte(self.CS, 0x07)      # MakSpeed
+        #self.writeByte(self.CS, 0x10)
+        #self.writeByte(self.CS, 0x00)
+
 
         self.writeByte(self.CS, 0x18)      # CONFIG
         #self.writeByte(self.CS, 0x00)
@@ -75,7 +92,7 @@ class axis:
         #self.writeByte(self.CS, 0b10000000)
 
         self.writeByte(self.CS, 0x16)      # Microstepping
-        self.writeByte(self.CS, 0x04)      # 0x04 - 1/16
+        self.writeByte(self.CS, 0x4)      # 0x4 - 1/16
       
     def MaxSpeed(self, speed):
         ' Setup of maximum speed '
