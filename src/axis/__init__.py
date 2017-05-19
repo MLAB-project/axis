@@ -46,7 +46,7 @@ class axis:
         self.config_EXT_CLK   = 0b0
         self.config_OSC_SEL   = 0b000
 
-        self.Reset()
+        #self.Reset()
 
 
     def writeByte(self, CS, address):
@@ -67,57 +67,71 @@ class axis:
             return eval(self.spi(device=self.arom_spi_name, method="SPI_read_byte").value)
 
 
-    def Reset(self, init = True):
-        ' Reset Axis and set default parameters for H-bridge '
-        self.writeByte(self.CS, 0xC0)      # reset
-        if init:
-            self.Initialize()
+    def Reset(self, init = True, ACC = 0x00a, DEC = 0x00a, stall_th = 2030, ocd_th = 3380, KVAL_HOLD = 0x29, KVAL_RUN = 0x29, KVAL_ACC = 0x29, KVAL_DEC = 0x29, FS_SPD = 0x027):
+        '''
+        Reset Axis and set default parameters for H-bridge
 
-    def Initialize(self, ACC = 0x000a, DEC = 0x000a):
+        Keyword arguments:
+
+        name -- desc (default: def)
+
+        ACC -- Acceleration (default: 0x008A)
+        DEC -- Deceleration (default: 0x0081)
+        stall_th -- Stall treshold value in mA (default: 2030)
+        ocd_th -- Over current treshold in mA (default: 3380)
+        KVAL_HOLD -- Holding KVAL (default: 0x29)
+        KVAL_RUN -- Constant speed KVAL (default: 0x29)
+        KVAL_ACC -- Acceleration startingKVAL (default: 0x29)
+        KVAL_DEC -- Deceleration startingKVAL (default: 0x29)
+        FS_SPD -- Fullstep speed (default: 0x027)
+        '''
+
+        if init:
+            self.writeByte(self.CS, 0xC0)      # reset
+
+        if stall_th > 4000:
+            stall_th = 4000
+
         self.writeByte(self.CS, self.L6470_STALL_TH)      # Stall Treshold setup
-        self.writeByte(self.CS, 0x70)      # 0x70 = 3.5A
+        self.writeByte(self.CS, int(stall_th/31.25)-1)      # 0x70 = 3.5A
         
+        if ocd_th > 6000:
+            ocd_th = 6000
+
         self.writeByte(self.CS, self.L6470_OCD_TH)      # Over Current Treshold setup 
-        self.writeByte(self.CS, 0x0A)      # 0x0A = 4A
+        self.writeByte(self.CS, int(ocd_th/375)-1)      # 0x0A = 4A
 
         self.writeByte(self.CS, self.L6470_FS_SPD)      # Full Step speed, 0x03FF - maximal - always microstepping
-        #self.writeByte(self.CS, 0x03)
-        #self.writeByte(self.CS, 0xFF)
-        self.writeByte(self.CS, 100)
-        self.writeByte(self.CS, 0xFF)
+        self.writeByte(self.CS, (FS_SPD >>16) & 0xFF)
+        self.writeByte(self.CS, (FS_SPD >> 8) & 0xFF)
+        self.writeByte(self.CS, (FS_SPD >> 0) & 0xFF)
 
 
         self.writeByte(self.CS, self.L6470_ACC)      # ACC (0x008a)
         self.writeByte(self.CS, (ACC >> 8) & 0xFF)
         self.writeByte(self.CS, (ACC >> 0) & 0xFF)
-
         self.writeByte(self.CS, self.L6470_DEC)      # DEC (0x008a)
         self.writeByte(self.CS, (DEC >> 8) & 0xFF)
         self.writeByte(self.CS, (DEC >> 0) & 0xFF)
 
-        #self.writeByte(self.CS, self.L6470_KVAL_RUN)      # KVAL_RUN -  Constant speed
-        #self.writeByte(self.CS, 0xF0)
+        self.writeByte(self.CS, self.L6470_KVAL_HOLD)
+        self.writeByte(self.CS, KVAL_HOLD)
+        self.writeByte(self.CS, self.L6470_KVAL_RUN)
+        self.writeByte(self.CS, KVAL_RUN)
+        self.writeByte(self.CS, self.L6470_KVAL_ACC)
+        self.writeByte(self.CS, KVAL_ACC)
+        self.writeByte(self.CS, self.L6470_KVAL_DEC)
+        self.writeByte(self.CS, KVAL_DEC)
 
-        self.writeByte(self.CS, self.L6470_KVAL_ACC)      # KVAL_ACC
-        self.writeByte(self.CS, 0xF0)
-
-        self.writeByte(self.CS, self.L6470_KVAL_DEC)      # KVAL_DEC
-        self.writeByte(self.CS, 0xF0)
-
-        self.writeByte(self.CS, self.L6470_MIN_SPEED)      # MinSpeed 0x1000 - LSPD_OPT - Low speed optimization
-        self.writeByte(self.CS, 0x10)
-        self.writeByte(self.CS, 0x00)
+        self.MinSpeed(speed = 0x00, LSPD_OPT = True)
 
         self.setConfig(F_PWM_INT = 0b001, F_PWM_DEC = 0b110, POW_SR = 0b00, OC_SD = 0b0, RESERVED = 0b0, EN_VSCOMP =  0b0, SW_MODE = 0b0, EXT_CLK = 0b0, OSC_SEL = 0b000)
         
-        #self.writeByte(self.CS, self.L6470_CONFIG)      # CONFIG
-        #self.writeByte(self.CS, 0b00111000)
-        #self.writeByte(self.CS, 0b00000000)
-        #self.writeByte(self.CS, 0b00111110)
-        #self.writeByte(self.CS, 0b10000000)
 
         self.writeByte(self.CS, self.L6470_STEP_MODE)      # Microstepping
         self.writeByte(self.CS, 0x04)      # 0x04 - 1/16
+
+
 
     def setConfig(self, F_PWM_INT = None, F_PWM_DEC = None, POW_SR = None, OC_SD = None, RESERVED = None, EN_VSCOMP = None, SW_MODE = None, EXT_CLK = None, OSC_SEL = None):
         
@@ -152,6 +166,8 @@ class axis:
         self.writeByte(self.CS, data[1])
 
         return config
+ 
+
       
     def MaxSpeed(self, speed):
         ' Setup of maximum speed  - 15.25 to 1560 steps/s'
@@ -165,9 +181,9 @@ class axis:
         data = [(speed_value >> i & 0xff) for i in (8,0)]
 
         print data
-        spi.SPI_write_byte(self.CS, self.L6470_MAX_SPEED)       # Max Speed setup 
-        spi.SPI_write_byte(self.CS, data[0])
-        spi.SPI_write_byte(self.CS, data[1])
+        self.writeByte(self.CS, self.L6470_MAX_SPEED)       # Max Speed setup 
+        self.writeByte(self.CS, data[0])
+        self.writeByte(self.CS, data[1])
         return (speed_value * 15.25)
 
       
@@ -188,10 +204,11 @@ class axis:
         data = [(speed_value >> i & 0xff) for i in (8,0)]
         
         print data
-        spi.SPI_write_byte(self.CS, self.L6470_MAX_SPEED)       # Max Speed setup 
-        spi.SPI_write_byte(self.CS, data[0] | lspd)
-        spi.SPI_write_byte(self.CS, data[1])
+        self.writeByte(self.CS, self.L6470_MAX_SPEED)       # Max Speed setup 
+        self.writeByte(self.CS, data[0] | lspd)
+        self.writeByte(self.CS, data[1])
         return (speed_value * 0.238)
+
 
     '''
           APPLICATION COMMANDS
@@ -236,6 +253,7 @@ class axis:
             self.writeByte(self.CS, 0b10010010 + int(direction))
             time.sleep(0.25)
  
+
     def GoZero(self, speed):
         ' Go to Zero position '
         self.ReleaseSW()
@@ -248,6 +266,7 @@ class axis:
         time.sleep(0.3)
         self.ReleaseSW()
 
+
     def GoHome(self, wait = True):
         ' Go to Zero position '
         self.ReleaseSW()
@@ -257,9 +276,11 @@ class axis:
         while self.IsBusy() and wait:
             time.sleep(0.25)
 
+
     def ResetPos(self):
         self.writeByte(self.CS, 0xD8)       # Reset position
         self.writeByte(self.CS, 0x00)
+
 
     def Move(self, direction = 0, units = 0):
         ' Move some distance units from current position'
@@ -279,11 +300,13 @@ class axis:
 
         return steps
 
+
     def MoveWait(self, units):
         ' Move some distance units from current position and wait for execution '
         self.Move(units)
         while self.IsBusy():
             pass
+
 
     def Run(self, direction = 0, speed = 0):
         speed_value = int(abs(speed) / 0.015)
@@ -302,31 +325,50 @@ class axis:
 
         return (speed_value * 0.015)
 
+
     def Float(self):
         ' switch H-bridge to High impedance state '
         print "switch H-bridge to High impedance state"
         self.writeByte(self.CS, 0xA0)
 
+
+
+    def ReadStatusReg(self):
+        ' Read status register '
+
+        return self.getParam(0x19)
+
+        '''
+        self.writeByte(self.CS, 0x20 | 0x19)   # Read from address 0x19 (STATUS)
+        self.writeByte(self.CS, 0x00)
+        data = [self.readByte()]
+        self.writeByte(self.CS, 0x00)
+        data += [self.readByte()] 
+        return (data[0] << 8 | data[1])
+        '''
+
     def ReadStatusBit(self, bit):
         ' Report given status bit '
-        self.writeByte(self.CS, 0x39)   # Read from address 0x19 (STATUS)
-        self.writeByte(self.CS, 0x00)
-        data0 = self.readByte()           # 1st byte
-        self.writeByte(self.CS, 0x00)
-        data1 = self.readByte()           # 2nd byte
-        #print hex(data0), hex(data1)
-        if bit > 7:                                   # extract requested bit
-            OutputBit = (data0 >> (bit - 8)) & 1
-        else:
-            OutputBit = (data1 >> bit) & 1        
-        return OutputBit
+
+        data = self.getParam(0x19)
+        return (data >> bit) & 1 
+
 
     def GetStatus(self):
-        self.writeByte(self.CS, 0x39)   # Read from address 0x19 (STATUS)
+        self.writeByte(self.CS, 0x20 | 0x19)   # Read from address 0x19 (STATUS)
         self.writeByte(self.CS, 0x00)
         data = [self.readByte()]      # 1st byte
         self.writeByte(self.CS, 0x00)
         data += [self.readByte()]
+
+        self.writeByte(self.CS, 0x20 | 0x04)   # Read from address 0x04 (SPEED)
+        self.writeByte(self.CS, 0x00)
+        spd = [self.readByte()]
+        self.writeByte(self.CS, 0x00)
+        spd += [self.readByte()]
+        self.writeByte(self.CS, 0x00)
+        spd += [self.readByte()]
+
 
         status = dict([('SCK_MOD',data[0] & 0x80 == 0x80),  #The SCK_MOD bit is an active high flag indicating that the device is working in Step-clock mode. In this case the step-clock signal should be provided through the STCK input pin. The DIR bit indicates the current motor direction
                     ('STEP_LOSS_B',data[0] & 0x40 == 0x40),
@@ -344,36 +386,29 @@ class axis:
                     ('BUSY',data[1] & 0x02 != 0x02),
                     ('HIZ',data[1] & 0x01 == 0x01),
                     ('MSByte', data[0]),
-                    ('LSByte', data[1])])
+                    ('LSByte', data[1]),
+                    ('SPEED', spd[0] << 16 | spd[1] <<8 | spd[2])])
 
         return status
 
 
-    def ReadStatusReg(self):
-        self.writeByte(self.CS, 0x39)   # Read from address 0x19 (STATUS)
-        self.writeByte(self.CS, 0x00)
-        data0 = self.readByte()           # 1st byte
-        self.writeByte(self.CS, 0x00)
-        data1 = self.readByte() 
-        print  "\t\t\t\t ", format(data0 << 8 | data1, '08b')
-        return data0 << 8 | data1
-
     def ABS_POS(self):
         return 0x01
+
 
     def EL_POS(self):
         return 0x02
 
+
     def MARK(self):
         return 0x03
+
 
     def SPEED(self):
         return 0x04
 
-    def getParam(self, param):
-        return self.ReadParam(param)
 
-    def ReadParam(self, param):
+    def getParam(self, param):          #TODO: toto bude nova verze funkce ReadPara, ReadParam uz nepouzivat. Nyni pouzivejte getParam(param)
         self.writeByte(self.CS, 0x20 | param)
         self.writeByte(self.CS, 0x00)
         data0 = self.readByte()           # 1st byte
@@ -383,19 +418,19 @@ class axis:
         data2 = self.readByte()
         return data0 << 16 | data1 <<8 | data2
 
-    def getPosition(self):
-        return self.ReadPosition()
 
-    def ReadPosition(self):
-        self.writeByte(self.CS, 0x20 | 0x01)   # Read from address (STATUS)
-        self.writeByte(self.CS, 0x00)
-        data0 = self.readByte()           # 1st byte
-        self.writeByte(self.CS, 0x00)
-        data1 = self.readByte()           # 2nd byte
-        self.writeByte(self.CS, 0x00)
-        data2 = self.readByte()           # 3rd byte
-        return data0 << 16 | data1 <<8 | data2
+    #def ReadParam(self, param):
+    #    return getParam(param)
+
+
+    def getPosition(self):
+        return self.getParam(0x01)
+
+
+    #def ReadPosition(self):
+    #    return self.getPosition()
     
+
     def IsBusy(self):
         if self.ReadStatusBit(1) == 1:
             return False
