@@ -2,6 +2,8 @@
 
 Axis is Python module for controlling stepper motors with [MLAB](https://www.mlab.cz) [HBSTEP01B](https://github.com/MLAB-project/Modules/blob/master/H_Bridge/HBSTEP01B/DOC/HBSTEP01B.cs.pdf) based on ST L6470 inteligent stepper motor driver.
 
+![HBSTEP](https://raw.githubusercontent.com/MLAB-project/Modules/master/H_Bridge/HBSTEP01B/DOC/SRC/img/HBSTEP01B_Top_Big.jpg)
+
 Class axis is prepared for use with multiple ways of connecting to the control computer. 
 
 ##### I2C (PyMLAB)
