@@ -19,6 +19,13 @@ Using with AROM requires fully installed and configured [AROM](http://wiki.mlab.
 
 #### Example with I2C
 
+```
+cd ~/repos/axis/examples
+python i2c_example.py
+```
+This example requires working [PyMLAB](https://github.com/MLAB-project/pymlab).
+
+
 ```Python
 import axis
 from pymlab import config
