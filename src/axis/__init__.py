@@ -1,7 +1,7 @@
 import time
 
 class axis:
-    def __init__(self, SPI, SPI_CS, Direction, StepsPerUnit = 1, protocol = 'i2c', arom_spi_name = 'spi'):
+    def __init__(self, SPI, SPI_CS, Direction  = True, StepsPerUnit = 1, protocol = 'i2c', arom_spi_name = 'spi'):
         ' One axis of robot '
         self.CS = SPI_CS
         self.Dir = Direction
@@ -60,7 +60,7 @@ class axis:
 
     def readByte(self):
         if self.protocol == 'i2c':
-            return self.spi.SPI_read_byte(self.CS, address)
+            return self.spi.SPI_read_byte()
         elif self.protocol == 'spi':
             return "Err. SPI neni podporovano"
         elif self.protocol == 'arom':
@@ -303,7 +303,7 @@ class axis:
 
     def MoveWait(self, units):
         ' Move some distance units from current position and wait for execution '
-        self.Move(units)
+        self.Move(units = units)
         while self.IsBusy():
             pass
 
@@ -350,7 +350,12 @@ class axis:
     def ReadStatusBit(self, bit):
         ' Report given status bit '
 
-        data = self.getParam(0x19)
+        self.writeByte(self.CS, 0x20 | 0x19)   # Read from address 0x19 (STATUS)
+        self.writeByte(self.CS, 0x00)
+        data = self.readByte() << 8
+        self.writeByte(self.CS, 0x00)
+        data |= self.readByte()
+
         return (data >> bit) & 1 
 
 
