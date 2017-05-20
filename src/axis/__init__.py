@@ -232,7 +232,7 @@ class axis:
 
         return abspos
 
-    def GoToDir(self, direction, speed):
+    def GoToDir(self, speed, direction = 1):
         data = [(speed >> i & 0xff) for i in (16,8,0)]
 
         self.writeByte(self.CS, 0b01101000 + int(direction))
@@ -370,7 +370,7 @@ class axis:
 
 
     def GetStatus(self):
-        return self.GetStatus() 
+        return self.getStatus() 
    
     def getStatus(self):
         self.writeByte(self.CS, 0x20 | 0x19)   # Read from address 0x19 (STATUS)
@@ -448,6 +448,9 @@ class axis:
     #def ReadPosition(self):
     #    return self.getPosition()
     
+    def wait(self):
+        while self.IsBusy():
+            pass
 
     def IsBusy(self):
         if self.ReadStatusBit(1) == 1:
