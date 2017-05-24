@@ -64,7 +64,37 @@ while True:
 
 
 #### Example with AROM
+Example with AROM (Autonomous robotic observatory manager) is attached to [AROM repository](https://github.com/Robozor-network/AROM).
 
+To run an example is needed to have installed AROM, PyMLAB and this Axis class.
+
+Before running example you must have configured and running '''pymlab_bridge''' AROM node. Configuration is described at [MLAB wiki page]()
+
+Pro tento příklad je potřeba mít vytvořený konfigurační sobor s následujícím obsahem:
+```Json
+{
+        "name": "pymlab", 
+        "children": [
+                {
+                        "port": 1, 
+                        "name": "bus1",
+                        "children": [
+                        {
+                                "type": "i2cspi", 
+                                "name": "mirrorTIME", 
+                                "address": 44
+                        }]
+                }
+        ]
+}
+
+```
+
+Nyní by mělo být možné spustit pymlab_bridge příkazem
+
+''rosrun arom pymlab_bridge.''
+Po spuštění můžeme spustit samotný příklad
+''rosrun arom demo_HBSTEP''
 
 ## Using
 
