@@ -80,8 +80,7 @@ Pro tento příklad je potřeba mít vytvořený konfigurační sobor ``/home/od
                 "children": [
                 {
                         "type": "i2cspi", 
-                        "name": "mirrorTIME", 
-                        "address": 44
+                        "name": "spi"
                 }]
         }]
 }
