@@ -102,7 +102,7 @@ class axis:
         self.writeByte(self.CS, int(ocd_th/375)-1)      # 0x0A = 4A
 
         self.writeByte(self.CS, self.L6470_FS_SPD)      # Full Step speed, 0x03FF - maximal - always microstepping
-        self.writeByte(self.CS, (FS_SPD >>16) & 0xFF)
+        #self.writeByte(self.CS, (FS_SPD >>16) & 0xFF)
         self.writeByte(self.CS, (FS_SPD >> 8) & 0xFF)
         self.writeByte(self.CS, (FS_SPD >> 0) & 0xFF)
 
@@ -125,7 +125,7 @@ class axis:
 
         self.MinSpeed(speed = 0x00, LSPD_OPT = True)
 
-        self.setConfig(F_PWM_INT = 0b001, F_PWM_DEC = 0b110, POW_SR = 0b00, OC_SD = 0b0, RESERVED = 0b0, EN_VSCOMP =  0b0, SW_MODE = 0b0, EXT_CLK = 0b0, OSC_SEL = 0b000)
+        self.setConfig(F_PWM_INT = 0b001, F_PWM_DEC = 0b110, POW_SR = 0b00, OC_SD = 0b0, RESERVED = 0b0, EN_VSCOMP =  0b1, SW_MODE = 0b0, EXT_CLK = 0b0, OSC_SEL = 0b000)
         
 
         self.writeByte(self.CS, self.L6470_STEP_MODE)      # Microstepping
@@ -307,23 +307,34 @@ class axis:
         while self.IsBusy():
             pass
 
+    def Wait(self):
+        while self.IsBusy():
+            pass
+
 
     def Run(self, direction = 0, speed = 0):
-        speed_value = int(abs(speed) / 0.015)
+        speed_value = int(abs(speed) * 67.106)
 
         if speed < 0:
             direction = not bool(direction)
 
+        if speed_value > 0x000FFFFF:
+            speed_value = 0x000FFFFF
+
         data = [(speed_value >> i & 0xff) for i in (16,8,0)]
 
-        self.writeByte(self.CS, 0b01010000 + int(direction))
+        self.writeByte(self.CS, 0b01010000 | bool(direction))
         self.writeByte(self.CS, data[0])
         self.writeByte(self.CS, data[1])
         self.writeByte(self.CS, data[2])
 
-        print 'run', bool(direction), speed_value, (data)
+        print "Run(%s, %s)" %(bool(direction), int(speed))
 
-        return (speed_value * 0.015)
+
+        #print 'run', bool(direction), speed_value, hex(0b01010000 + int(direction)), hex(data[0]), hex(data[1]), hex(data[2])
+
+        return (speed_value / 67.106)
+
 
 
     def Float(self):
