@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import time
 
 class axis:
@@ -216,7 +219,7 @@ class axis:
     '''
 
 
-    def GoTo(self, abspos):
+    def GoTo(self, abspos, wait=False):
         data = [(abspos >> i & 0xff) for i in (16,8,0)]
 
         self.writeByte(self.CS, 0b01100000)
@@ -224,9 +227,12 @@ class axis:
         self.writeByte(self.CS, data[1])
         self.writeByte(self.CS, data[2])
 
+        while self.IsBusy() and wait:
+            time.sleep(0.25)
+
         return abspos
 
-    def GoToDir(self, direction, speed):
+    def GoToDir(self, speed, direction = 1):
         data = [(speed >> i & 0xff) for i in (16,8,0)]
 
         self.writeByte(self.CS, 0b01101000 + int(direction))
@@ -282,30 +288,34 @@ class axis:
         self.writeByte(self.CS, 0x00)
 
 
-    def Move(self, direction = 0, units = 0):
+    def Move(self, units = 0, direction = 0, wait = False):
         ' Move some distance units from current position'
         print 'move', units, 'units'
         
         steps = int(abs(units) * self.SPU)
 
+        direction = bool(direction)
         if units < 0:
-            direction = not bool(direction)
+            direction = not direction
 
         data = [(steps >> i & 0xff) for i in (16,8,0)]
+
+        print "move data arr", data, bin(0b01000000 + int(direction))
 
         self.writeByte(self.CS, 0b01000000 + int(direction))
         self.writeByte(self.CS, data[0])
         self.writeByte(self.CS, data[1])
         self.writeByte(self.CS, data[2])
 
+        while self.IsBusy() and wait:
+            pass
+
         return steps
 
 
-    def MoveWait(self, units):
+    def MoveWait(self, units, direction = 0):
         ' Move some distance units from current position and wait for execution '
-        self.Move(units = units)
-        while self.IsBusy():
-            pass
+        self.Move(units = units, direction = direction, wait = True)
 
     def Wait(self):
         while self.IsBusy():
@@ -371,6 +381,9 @@ class axis:
 
 
     def GetStatus(self):
+        return self.getStatus() 
+   
+    def getStatus(self):
         self.writeByte(self.CS, 0x20 | 0x19)   # Read from address 0x19 (STATUS)
         self.writeByte(self.CS, 0x00)
         data = [self.readByte()]      # 1st byte
@@ -446,6 +459,9 @@ class axis:
     #def ReadPosition(self):
     #    return self.getPosition()
     
+    def wait(self):
+        while self.IsBusy():
+            pass
 
     def IsBusy(self):
         if self.ReadStatusBit(1) == 1:
