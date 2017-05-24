@@ -74,27 +74,25 @@ Pro tento příklad je potřeba mít vytvořený konfigurační sobor ``/home/od
 ```Json
 {
         "name": "pymlab", 
-        "children": [
+        "children": [{
+                "port": 1, 
+                "name": "bus1",
+                "children": [
                 {
-                        "port": 1, 
-                        "name": "bus1",
-                        "children": [
-                        {
-                                "type": "i2cspi", 
-                                "name": "mirrorTIME", 
-                                "address": 44
-                        }]
-                }
-        ]
+                        "type": "i2cspi", 
+                        "name": "mirrorTIME", 
+                        "address": 44
+                }]
+        }]
 }
 
 ```
 
 Nyní by mělo být možné spustit pymlab_bridge příkazem
 
-''rosrun arom pymlab_bridge.''
+``rosrun arom pymlab_bridge.``
 Po spuštění můžeme spustit samotný příklad
-''rosrun arom demo_HBSTEP''
+``rosrun arom demo_HBSTEP``
 
 ## Using
 
