@@ -70,7 +70,7 @@ To run an example is needed to have installed AROM, PyMLAB and this Axis class.
 
 Before running example you must have configured and running '''pymlab_bridge''' AROM node. Configuration is described at [MLAB wiki page]()
 
-Pro tento příklad je potřeba mít vytvořený konfigurační sobor s následujícím obsahem:
+Pro tento příklad je potřeba mít vytvořený konfigurační sobor ''/home/odroid/robozor/station/pymlab_presets/telescope.json'' s následujícím obsahem:
 ```Json
 {
         "name": "pymlab", 
