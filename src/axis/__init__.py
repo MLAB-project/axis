@@ -4,14 +4,25 @@
 import time
 
 class axis:
+    STEP_MODE_FULL = [0b000, 1]
+    STEP_MODE_HALF = [0b001, 2]
+    STEP_MODE_1_2 = [0b001, 2]
+    STEP_MODE_1_4 = [0b010, 4]
+    STEP_MODE_1_8 = [0b011, 8]
+    STEP_MODE_1_16 = [0b100, 16]
+    STEP_MODE_1_32 = [0b101, 32]
+    STEP_MODE_1_64 = [0b110, 64]
+    STEP_MODE_1_128 = [0b111, 128]
+
     def __init__(self, SPI, SPI_CS, Direction  = True, StepsPerUnit = 1, protocol = 'i2c', arom_spi_name = 'spi'):
         ' One axis of robot '
         self.CS = SPI_CS
         self.Dir = Direction
-        self.SPU = StepsPerUnit
         self.spi = SPI
         self.protocol = protocol
         self.arom_spi_name = arom_spi_name
+        self.SPU = StepsPerUnit
+
 
         self.L6470_ABS_POS      =0x01
         self.L6470_EL_POS       =0x02
@@ -49,7 +60,8 @@ class axis:
         self.config_EXT_CLK   = 0b0
         self.config_OSC_SEL   = 0b000
 
-        #self.Reset()
+        self.Setup(ResetDevice=True)
+
 
 
     def writeByte(self, CS, address):
@@ -68,6 +80,135 @@ class axis:
             return "Err. SPI neni podporovano"
         elif self.protocol == 'arom':
             return eval(self.spi(device=self.arom_spi_name, method="SPI_read_byte").value)
+
+
+    def Setup(self, ResetDevice = True, ACC = None, DEC = None, STALL_TH = None, OCD_TH = None,
+        KVAL_HOLD = None, KVAL_RUN = None, KVAL_ACC = None, KVAL_DEC = None, FS_SPD = None, STEP_MODE = None,
+        StepsPerUnit = None, MIN_SPEED = None, MAX_SPEED = None, CONFIG = None):
+        
+        '''
+        Reset Axis and set default parameters for H-bridge
+
+        Keyword arguments:
+
+        name -- desc (default: def)
+
+        ACC -- Acceleration (default: 0x008A)
+        DEC -- Deceleration (default: 0x0081)
+        stall_th -- Stall treshold value in mA (default: 2030)
+        ocd_th -- Over current treshold in mA (default: 3380)
+        KVAL_HOLD -- Holding KVAL (default: 0x29)
+        KVAL_RUN -- Constant speed KVAL (default: 0x29)
+        KVAL_ACC -- Acceleration startingKVAL (default: 0x29)
+        KVAL_DEC -- Deceleration startingKVAL (default: 0x29)
+        FS_SPD -- Fullstep speed (default: 0x027)
+        '''
+        if ResetDevice:
+            self.writeByte(self.CS, 0b11000000)
+
+        if StepsPerUnit:
+            self.writeByte(self.CS, self.L6470_STEP_MODE)      # Microstepping
+            self.writeByte(self.CS, StepsPerUnit[0])
+            self.SPU = StepsPerUnit[1]
+
+        if STALL_TH:
+            if STALL_TH > 4000:
+                STALL_TH = 4000
+
+            self.writeByte(self.CS, self.L6470_STALL_TH)      # Stall Treshold setup
+            self.writeByte(self.CS, int(STALL_TH/31.25)-1)      # 0x70 = 3.5A
+        
+        if OCD_TH:
+            if OCD_TH > 6000:
+                OCD_TH = 6000
+
+            self.writeByte(self.CS, self.L6470_OCD_TH)      # Over Current Treshold setup 
+            self.writeByte(self.CS, int(OCD_TH/375)-1)      # 0x0A = 4A
+
+        if FS_SPD:
+            if FS_SPD < 0: FS_SPD = 0
+            if FS_SPD > 15610: FS_SPD=15610
+            FS_SPD_value = int(((FS_SPD+0.5) * 250e-9)/(2**-18))
+            self.writeByte(self.CS, self.L6470_FS_SPD)      # Full Step speed, 0x03FF - maximal - always microstepping
+            self.writeByte(self.CS, (FS_SPD_value >> 8) & 0xFF)
+            self.writeByte(self.CS, (FS_SPD_value >> 0) & 0xFF)
+
+        # KAVL hodnoty v rozsahu 0-1
+        # KVAL values in range 0-1
+
+        if KVAL_HOLD:
+            if KVAL_HOLD < 0: KVAL_HOLD = 0
+            elif KVAL_HOLD > 0.9961: KVAL_HOLD = 0.9961
+            self.writeByte(self.CS, self.L6470_KVAL_HOLD)
+            self.writeByte(self.CS, KVAL_HOLD)
+
+        if KVAL_RUN:
+            if KVAL_RUN < 0: KVAL_RUN = 0
+            elif KVAL_RUN > 0.9961: KVAL_RUN = 0.9961
+            self.writeByte(self.CS, self.L6470_KVAL_RUN)
+            self.writeByte(self.CS, int(255.0*KVAL_RUN))
+
+        if KVAL_ACC:
+            if KVAL_ACC < 0: KVAL_ACC = 0
+            elif KVAL_ACC > 0.9961: KVAL_ACC = 0.9961
+            self.writeByte(self.CS, self.L6470_KVAL_ACC)
+            self.writeByte(self.CS, int(256.0*KVAL_ACC))
+
+        if KVAL_DEC:
+            if KVAL_DEC < 0: KVAL_DEC = 0
+            elif KVAL_DEC > 0.9961: KVAL_DEC = 0.9961
+            self.writeByte(self.CS, self.L6470_KVAL_DEC)
+            self.writeByte(self.CS, int(256.0*KVAL_DEC))
+
+        if ACC:
+            if ACC < 14.55: ACC = 14.55
+            elif ACC > 59590: ACC = 59590
+            ACC_value = int(ACC * (250e-9)**2/(2**-40))
+            if ACC_value == 0xFFF: ACC_value = 0xFFE
+            self.writeByte(self.CS, self.L6470_ACC)      # ACC (0x008a)
+            self.writeByte(self.CS, (ACC_value >> 8) & 0xFF)
+            self.writeByte(self.CS, (ACC_value >> 0) & 0xFF)
+
+        if DEC:
+            if DEC < 14.55: DEC = 14.55
+            elif DEC > 59590: DEC = 59590
+            DEC_value = int((DEC * (250e-9)**2)/(2**-40))
+            self.writeByte(self.CS, self.L6470_DEC)      # DEC (0x008a)
+            self.writeByte(self.CS, (DEC_value >> 8) & 0xFF)
+            self.writeByte(self.CS, (DEC_value >> 0) & 0xFF)
+
+        if MAX_SPEED:
+            if MAX_SPEED < 15.25: MAX_SPEED = 15.25
+            elif MAX_SPEED > 15610: MAX_SPEED = 15610
+            speed_value = int((MAX_SPEED * 250e-9)/(2**-18))
+            data = [(speed_value >> i & 0xff) for i in (8,0)]
+            self.writeByte(self.CS, self.L6470_MAX_SPEED)       # Max Speed setup 
+            self.writeByte(self.CS, data[0])
+            self.writeByte(self.CS, data[1])
+
+        if MIN_SPEED:
+            lspd = 0
+            if LSPD_OPT: lspd = 0b10000000
+           
+            if (MIN_SPEED < 0): MIN_SPEED = 0
+            elif (MIN_SPEED > 976.3): MIN_SPEED = 976.3
+
+            speed_value = int((MIN_SPEED * 250e-9)/(2**-24))
+
+            data = [(speed_value >> i & 0xff) for i in (8,0)]
+            
+            self.writeByte(self.CS, self.L6470_MAX_SPEED)       # Max Speed setup 
+            self.writeByte(self.CS, data[0] | lspd)
+            self.writeByte(self.CS, data[1])
+
+        if CONFIG:
+            print "config:", CONFIG
+
+        self.writeByte(self.CS, self.L6470_STEP_MODE)      # Microstepping
+        self.writeByte(self.CS, 0b111)      # 0x04 - 1/16
+        self.microstepping = 128
+
+
 
 
     def Reset(self, init = True, ACC = 0x00a, DEC = 0x00a, stall_th = 2030, ocd_th = 3380, KVAL_HOLD = 0x29, KVAL_RUN = 0x29, KVAL_ACC = 0x29, KVAL_DEC = 0x29, FS_SPD = 0x027):
@@ -90,7 +231,7 @@ class axis:
         '''
 
         if init:
-            self.writeByte(self.CS, 0xC0)      # reset
+            self.writeByte(self.CS, 0xC0)      # reset OC
 
         if stall_th > 4000:
             stall_th = 4000
@@ -133,6 +274,7 @@ class axis:
 
         self.writeByte(self.CS, self.L6470_STEP_MODE)      # Microstepping
         self.writeByte(self.CS, 0x04)      # 0x04 - 1/16
+        self.microstepping = 16
 
 
 
@@ -174,43 +316,37 @@ class axis:
       
     def MaxSpeed(self, speed):
         ' Setup of maximum speed  - 15.25 to 1560 steps/s'
+        if speed < 15.25: speed = 15.25
+        elif speed > 15610: speed = 15610
 
-        speed_value = int(speed / 15.25)
-        if (speed_value <= 0):
-            speed_value = 1
-        elif (speed_value >= 1023):
-            speed_value = 1023
+        speed_value = int((speed * 250e-9)/(2**-18))
 
         data = [(speed_value >> i & 0xff) for i in (8,0)]
 
-        print data
         self.writeByte(self.CS, self.L6470_MAX_SPEED)       # Max Speed setup 
         self.writeByte(self.CS, data[0])
         self.writeByte(self.CS, data[1])
-        return (speed_value * 15.25)
+        return speed
 
       
     def MinSpeed(self, speed, LSPD_OPT = True):
         ' Setup of minimum speed  - 0 to 976 steps/s'
 
-        if LSPD_OPT:
-            lspd = 0b10000000
-        else:
-            lspd = 0
+        lspd = 0
+        if LSPD_OPT: lspd = 0b10000000
+       
 
-        speed_value = int(speed / 0.238)
-        if (speed_value <= 0):
-            speed_value = 1
-        elif (speed_value >= 976):
-            speed_value = 976
+        if (speed < 0): speed = 0
+        elif (speed > 976.3): speed = 976.3
+
+        speed_value = int((speed * 250e-9)/(2**-24))
 
         data = [(speed_value >> i & 0xff) for i in (8,0)]
         
-        print data
         self.writeByte(self.CS, self.L6470_MAX_SPEED)       # Max Speed setup 
         self.writeByte(self.CS, data[0] | lspd)
         self.writeByte(self.CS, data[1])
-        return (speed_value * 0.238)
+        return speed
 
 
     '''
@@ -219,8 +355,8 @@ class axis:
     '''
 
 
-    def GoTo(self, abspos, wait=False):
-        data = [(abspos >> i & 0xff) for i in (16,8,0)]
+    def GoTo(self, abspos, wait=False, float = True):
+        data = [(abspos*self.SPU >> i & 0xff) for i in (16,8,0)]
 
         self.writeByte(self.CS, 0b01100000)
         self.writeByte(self.CS, data[0])
@@ -230,15 +366,24 @@ class axis:
         while self.IsBusy() and wait:
             time.sleep(0.25)
 
+        if wait and float:
+            self.Float()
+
         return abspos
 
-    def GoToDir(self, speed, direction = 1):
-        data = [(speed >> i & 0xff) for i in (16,8,0)]
+    def GoToDir(self, speed, direction = 1, wait=False, float = True):
+        data = [(speed*self.SPU >> i & 0xff) for i in (16,8,0)]
 
         self.writeByte(self.CS, 0b01101000 + int(direction))
         self.writeByte(self.CS, data[0])
         self.writeByte(self.CS, data[1])
         self.writeByte(self.CS, data[2])
+
+        while self.IsBusy() and wait:
+            time.sleep(0.25)
+
+        if wait and float:
+            self.Float()
 
         return speed
 
@@ -292,7 +437,9 @@ class axis:
         ' Move some distance units from current position'
         print 'move', units, 'units'
         
-        steps = int(abs(units) * self.SPU)
+        print self.SPU
+        print self.microstepping
+        steps = int(abs(units) * self.SPU * self.microstepping)
 
         direction = bool(direction)
         if units < 0:
@@ -300,15 +447,20 @@ class axis:
 
         data = [(steps >> i & 0xff) for i in (16,8,0)]
 
-        print "move data arr", data, bin(0b01000000 + int(direction))
+        print "move data arr", data, bin(0b01000000 + int(direction))[2:].zfill(8), bin(data[0])[2:].zfill(8), bin(data[1])[2:].zfill(8), bin(data[2])[2:].zfill(8)
 
         self.writeByte(self.CS, 0b01000000 + int(direction))
         self.writeByte(self.CS, data[0])
         self.writeByte(self.CS, data[1])
         self.writeByte(self.CS, data[2])
 
+        time.sleep(0.25)
         while self.IsBusy() and wait:
-            pass
+            time.sleep(0.25)
+            print "wait"
+
+        print self.getStatus()
+        print self.IsBusy(), wait
 
         return steps
 
@@ -323,13 +475,10 @@ class axis:
 
 
     def Run(self, direction = 0, speed = 0):
-        speed_value = int(abs(speed) * 67.106)
+        speed_value = abs(self._IOspeed(speed))
 
-        if speed < 0:
-            direction = not bool(direction)
-
-        if speed_value > 0x000FFFFF:
-            speed_value = 0x000FFFFF
+        if speed < 0:direction = not bool(direction)
+        #if speed_value > 0x000FFFFF: speed_value = 0x000FFFFF
 
         data = [(speed_value >> i & 0xff) for i in (16,8,0)]
 
@@ -338,12 +487,10 @@ class axis:
         self.writeByte(self.CS, data[1])
         self.writeByte(self.CS, data[2])
 
-        print "Run(%s, %s)" %(bool(direction), int(speed))
+        print "Run(%s, %s [steps/s])" %(bool(direction), int(speed))
 
 
-        #print 'run', bool(direction), speed_value, hex(0b01010000 + int(direction)), hex(data[0]), hex(data[1]), hex(data[2])
-
-        return (speed_value / 67.106)
+        return self._Speed(speed_value)
 
 
 
@@ -398,7 +545,7 @@ class axis:
         self.writeByte(self.CS, 0x00)
         spd += [self.readByte()]
 
-
+        print bin(data[0]), bin(data[1]), bin((data[0] << 8)|data[1])[2:].zfill(16), spd[0] << 16 | spd[1] <<8 | spd[2]
         status = dict([('SCK_MOD',data[0] & 0x80 == 0x80),  #The SCK_MOD bit is an active high flag indicating that the device is working in Step-clock mode. In this case the step-clock signal should be provided through the STCK input pin. The DIR bit indicates the current motor direction
                     ('STEP_LOSS_B',data[0] & 0x40 == 0x40),
                     ('STEP_LOSS_A',data[0] & 0x20 == 0x20),
@@ -416,7 +563,7 @@ class axis:
                     ('HIZ',data[1] & 0x01 == 0x01),
                     ('MSByte', data[0]),
                     ('LSByte', data[1]),
-                    ('SPEED', spd[0] << 16 | spd[1] <<8 | spd[2])])
+                    ('SPEED', self._Speed(spd[0] << 16 | spd[1] <<8 | spd[2]))])
 
         return status
 
@@ -465,8 +612,15 @@ class axis:
 
     def IsBusy(self):
         if self.ReadStatusBit(1) == 1:
-            return False
-        else:
             return True
+        else:
+            return False
+
+
+    def _IOspeed(self, speed):
+        return int((speed * 250e-9)/(2**-28))
+
+    def _Speed(self, speed):
+        return ((speed)*2**-28)/250e-9
 
 # End Class axis --------------------------------------------------
