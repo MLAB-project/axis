@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import time
+import datetime
 
 class axis:
     STEP_MODE_FULL = [0b000, 1]
@@ -72,7 +73,6 @@ class axis:
         elif self.protocol == 'arom':
             return eval(self.spi(device=self.arom_spi_name, method="SPI_write_byte", parameters=str((self.CS,address))).value) # self.spi.I2CSPI_MSB_FIRST| self.spi.I2CSPI_MODE_CLK_IDLE_HIGH_DATA_EDGE_TRAILING| self.spi.I2CSPI_CLK_461kHz
 
-
     def readByte(self):
         if self.protocol == 'i2c':
             return self.spi.SPI_read_byte()
@@ -80,6 +80,14 @@ class axis:
             return "Err. SPI neni podporovano"
         elif self.protocol == 'arom':
             return eval(self.spi(device=self.arom_spi_name, method="SPI_read_byte").value)
+
+    def writeData(self):
+        if self.protocol == 'i2c':
+            return "Err. SPI neni podporovano"
+        elif self.protocol == 'spi':
+            return "Err. SPI neni podporovano"
+        elif self.protocol == 'arom':
+            return eval(self.spi(device=self.arom_spi_name, method="SPI_write_data", parameters=str((self.CS,address))).value) # self.spi.I2CSPI_MSB_FIRST| self.spi.I2CSPI_MODE_CLK_IDLE_HIGH_DATA_EDGE_TRAILING| self.spi.I2CSPI_CLK_461kHz
 
 
     def Setup(self, ResetDevice = True, ACC = None, DEC = None, STALL_TH = None, OCD_TH = None,
@@ -205,8 +213,8 @@ class axis:
             print "config:", CONFIG
 
         self.writeByte(self.CS, self.L6470_STEP_MODE)      # Microstepping
-        self.writeByte(self.CS, 0b111)      # 0x04 - 1/16
-        self.microstepping = 128
+        self.writeByte(self.CS, self.STEP_MODE_1_16[0])      # 0x04 - 1/16
+        self.microstepping = self.STEP_MODE_1_16[1]
 
 
 
@@ -414,7 +422,6 @@ class axis:
         self.writeByte(self.CS, speed)  
         while self.IsBusy():
             time.sleep(0.25)
-        time.sleep(0.3)
         self.ReleaseSW()
 
 
@@ -429,8 +436,9 @@ class axis:
 
 
     def ResetPos(self):
-        self.writeByte(self.CS, 0xD8)       # Reset position
-        self.writeByte(self.CS, 0x00)
+        #self.writeByte(self.CS, 0xD8)       # Reset position
+        #self.writeByte(self.CS, 0x00)
+        self.writeData(self.CS, [0xD8, 0x00])
 
 
     def Move(self, units = 0, direction = 0, wait = False):
@@ -477,11 +485,10 @@ class axis:
     def Run(self, direction = 0, speed = 0):
         speed_value = abs(self._IOspeed(speed))
 
-        if speed < 0:direction = not bool(direction)
+        if speed < 0: direction = not bool(direction)
         #if speed_value > 0x000FFFFF: speed_value = 0x000FFFFF
 
         data = [(speed_value >> i & 0xff) for i in (16,8,0)]
-
         self.writeByte(self.CS, 0b01010000 | bool(direction))
         self.writeByte(self.CS, data[0])
         self.writeByte(self.CS, data[1])
@@ -489,16 +496,13 @@ class axis:
 
         print "Run(%s, %s [steps/s])" %(bool(direction), int(speed))
 
-
         return self._Speed(speed_value)
-
 
 
     def Float(self):
         ' switch H-bridge to High impedance state '
         print "switch H-bridge to High impedance state"
         self.writeByte(self.CS, 0xA0)
-
 
 
     def ReadStatusReg(self):
@@ -527,45 +531,63 @@ class axis:
         return (data >> bit) & 1 
 
 
-    def GetStatus(self):
-        return self.getStatus() 
+    #def GetStatus(self):
+    #    return self.getStatus() 
    
     def getStatus(self):
-        self.writeByte(self.CS, 0x20 | 0x19)   # Read from address 0x19 (STATUS)
-        self.writeByte(self.CS, 0x00)
-        data = [self.readByte()]      # 1st byte
-        self.writeByte(self.CS, 0x00)
-        data += [self.readByte()]
+        try:
+            #print "GetStatus"
+            self.writeByte(self.CS, 0x20 | 0x19)   # Read from address 0x19 (STATUS)
+            self.writeByte(self.CS, 0x00)
+            data = [self.readByte()]      # 1st byte
+            self.writeByte(self.CS, 0x00)
+            data += [self.readByte()]
+            #print data
 
-        self.writeByte(self.CS, 0x20 | 0x04)   # Read from address 0x04 (SPEED)
-        self.writeByte(self.CS, 0x00)
-        spd = [self.readByte()]
-        self.writeByte(self.CS, 0x00)
-        spd += [self.readByte()]
-        self.writeByte(self.CS, 0x00)
-        spd += [self.readByte()]
+            self.writeByte(self.CS, 0x20 | 0x04)   # Read from address 0x04 (SPEED)
+            self.writeByte(self.CS, 0x00)
+            spd = [self.readByte()]
+            self.writeByte(self.CS, 0x00)
+            spd += [self.readByte()]
+            self.writeByte(self.CS, 0x00)
+            spd += [self.readByte()]
+            #print spd
 
-        print bin(data[0]), bin(data[1]), bin((data[0] << 8)|data[1])[2:].zfill(16), spd[0] << 16 | spd[1] <<8 | spd[2]
-        status = dict([('SCK_MOD',data[0] & 0x80 == 0x80),  #The SCK_MOD bit is an active high flag indicating that the device is working in Step-clock mode. In this case the step-clock signal should be provided through the STCK input pin. The DIR bit indicates the current motor direction
-                    ('STEP_LOSS_B',data[0] & 0x40 == 0x40),
-                    ('STEP_LOSS_A',data[0] & 0x20 == 0x20),
-                    ('OCD',data[0] & 0x10 == 0x10),
-                    ('TH_SD',data[0] & 0x08 == 0x08),
-                    ('TH_WRN',data[0] & 0x04 == 0x04),
-                    ('UVLO',data[0] & 0x02 == 0x02),
-                    ('WRONG_CMD',data[0] & 0x01 == 0x01),   #The NOTPERF_CMD and WRONG_CMD flags are active high and indicate, respectively, that the command received by SPI cannot be performed or does not exist at all.
-                    ('NOTPERF_CMD',data[1] & 0x80 == 0x80),
-                    ('MOT_STATUS',data[1] & 0x60),
-                    ('DIR',data[1] & 0x10 == 0x10),
-                    ('SW_EVN',data[1] & 0x08 == 0x08),
-                    ('SW_F',data[1] & 0x04 == 0x04),        #The SW_F flag reports the SW input status (low for open and high for closed).
-                    ('BUSY',data[1] & 0x02 != 0x02),
-                    ('HIZ',data[1] & 0x01 == 0x01),
-                    ('MSByte', data[0]),
-                    ('LSByte', data[1]),
-                    ('SPEED', self._Speed(spd[0] << 16 | spd[1] <<8 | spd[2]))])
+            #print bin(data[0]), bin(data[1]), bin((data[0] << 8)|data[1])[2:].zfill(16), spd[0] << 16 | spd[1] <<8 | spd[2]
+            status = None
+            status = dict([('SCK_MOD',data[0] & 0x80 == 0x80),  #The SCK_MOD bit is an active high flag indicating that the device is working in Step-clock mode. In this case the step-clock signal should be provided through the STCK input pin. The DIR bit indicates the current motor direction
+                        ('STEP_LOSS_B',data[0] & 0x40 == 0x40),
+                        ('STEP_LOSS_A',data[0] & 0x20 == 0x20),
+                        ('OCD',data[0] & 0x10 == 0x10),
+                        ('TH_SD',data[0] & 0x08 == 0x08),
+                        ('TH_WRN',data[0] & 0x04 == 0x04),
+                        ('UVLO',data[0] & 0x02 == 0x02),
+                        ('WRONG_CMD',data[0] & 0x01 == 0x01),   #The NOTPERF_CMD and WRONG_CMD flags are active high and indicate, respectively, that the command received by SPI cannot be performed or does not exist at all.
+                        ('NOTPERF_CMD',data[1] & 0x80 == 0x80),
+                        ('MOT_STATUS',data[1] & 0x60),
+                        ('DIR',data[1] & 0x10 == 0x10),
+                        ('SW_EVN',data[1] & 0x08 == 0x08),
+                        ('SW_F',data[1] & 0x04 == 0x04),        #The SW_F flag reports the SW input status (low for open and high for closed).
+                        ('BUSY',data[1] & 0x02 != 0x02),
+                        ('HIZ',data[1] & 0x01 == 0x01),
+                        ('MSByte', data[0]),
+                        ('LSByte', data[1]),
+                        ('SPEED', self._Speed(spd[0] << 16 | spd[1] <<8 | spd[2])),
+                        ('POSITION', self.getPosition()),
+                        ('DATETIME', time.time())
+                        ])
+                        #('SPEED', 0)])
+            
+            if data[0] == 0:
+                print "i2c problem", bin(data[0]), bin(data[1])
+                #print bin(data[0]), bin(data[1]), bin((data[0] << 8)|data[1])[2:].zfill(16), spd[0] << 16 | spd[1] <<8 | spd[2]
 
-        return status
+            #print status
+            return status
+            
+        except Exception as e:
+            print "GetStatusErr>>", e
+            return dict()
 
 
     def ABS_POS(self):
@@ -611,10 +633,14 @@ class axis:
             pass
 
     def IsBusy(self):
-        if self.ReadStatusBit(1) == 1:
+        try:
+            return self.getStatus()['BUSY']
+        except Exception as e:
             return True
-        else:
-            return False
+        #if self.ReadStatusBit(1) == 1:
+        #    return True
+        #else:
+        #    return False
 
 
     def _IOspeed(self, speed):
