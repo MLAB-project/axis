@@ -573,6 +573,7 @@ class axis:
                         ('MSByte', data[0]),
                         ('LSByte', data[1]),
                         ('SPEED', self._Speed(spd[0] << 16 | spd[1] <<8 | spd[2])),
+                        ('SPEED_RAW', spd[0] << 16 | spd[1] <<8 | spd[2]),
                         ('POSITION', self.getPosition()),
                         ('DATETIME', time.time())
                         ])
@@ -646,7 +647,9 @@ class axis:
     def _IOspeed(self, speed):
         return int((speed * 250e-9)/(2**-28))
 
-    def _Speed(self, speed):
+    def _Speed(self, speed, dir = False):
+        #if dir:
+        #    return (((speed)*2**-28)/250e-9)*-1
+        #else:
         return ((speed)*2**-28)/250e-9
-
 # End Class axis --------------------------------------------------
