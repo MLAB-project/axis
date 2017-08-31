@@ -553,8 +553,10 @@ class axis:
             spd += [self.readByte()]
             #print spd
 
+            pos = self.getPosition()
+
             #print bin(data[0]), bin(data[1]), bin((data[0] << 8)|data[1])[2:].zfill(16), spd[0] << 16 | spd[1] <<8 | spd[2]
-            status = None
+            status = dict()
             status = dict([('SCK_MOD',data[0] & 0x80 == 0x80),  #The SCK_MOD bit is an active high flag indicating that the device is working in Step-clock mode. In this case the step-clock signal should be provided through the STCK input pin. The DIR bit indicates the current motor direction
                         ('STEP_LOSS_B',data[0] & 0x40 == 0x40),
                         ('STEP_LOSS_A',data[0] & 0x20 == 0x20),
@@ -573,7 +575,8 @@ class axis:
                         ('MSByte', data[0]),
                         ('LSByte', data[1]),
                         ('SPEED', self._Speed(spd[0] << 16 | spd[1] <<8 | spd[2])),
-                        ('POSITION', self.getPosition()),
+                        ('POSITION', pos),
+                        ('POSITION_CLC', pos/(self.microstepping*1.0)),
                         ('DATETIME', time.time())
                         ])
                         #('SPEED', 0)])
