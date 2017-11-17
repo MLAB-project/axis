@@ -23,6 +23,7 @@ class axis:
         self.protocol = protocol
         self.arom_spi_name = arom_spi_name
         self.SPU = StepsPerUnit
+        self.sw_range = None
 
 
         self.L6470_ABS_POS      =0x01
@@ -212,9 +213,15 @@ class axis:
         if CONFIG:
             print "config:", CONFIG
 
-        self.writeByte(self.CS, self.L6470_STEP_MODE)      # Microstepping
-        self.writeByte(self.CS, self.STEP_MODE_1_16[0])      # 0x04 - 1/16
-        self.microstepping = self.STEP_MODE_1_16[1]
+        if STEP_MODE:
+            print "strep mode:", STEP_MODE
+            self.writeByte(self.CS, self.L6470_STEP_MODE)      # Microstepping
+            self.writeByte(self.CS, STEP_MODE[0])      # 0x04 - 1/16
+            self.microstepping = STEP_MODE[1]
+        else:
+            self.writeByte(self.CS, self.L6470_STEP_MODE)      # Microstepping
+            self.writeByte(self.CS, self.STEP_MODE_1_16[0])      # 0x04 - 1/16
+            self.microstepping = self.STEP_MODE_1_16[1]
 
 
 
@@ -284,6 +291,12 @@ class axis:
         self.writeByte(self.CS, 0x04)      # 0x04 - 1/16
         self.microstepping = 16
 
+
+    def clearStatus(self):
+        self.writeByte(self.CS, self.L6470_ABS_POS)
+        self.writeByte(self.CS, 0x00)
+        self.writeByte(self.CS, 0x00)
+        self.writeByte(self.CS, 0x00)
 
 
     def setConfig(self, F_PWM_INT = None, F_PWM_DEC = None, POW_SR = None, OC_SD = None, RESERVED = None, EN_VSCOMP = None, SW_MODE = None, EXT_CLK = None, OSC_SEL = None):
@@ -436,9 +449,9 @@ class axis:
 
 
     def ResetPos(self):
-        #self.writeByte(self.CS, 0xD8)       # Reset position
-        #self.writeByte(self.CS, 0x00)
-        self.writeData(self.CS, [0xD8, 0x00])
+        self.writeByte(self.CS, 0xD8)       # Reset position
+        self.writeByte(self.CS, 0x00)
+        #self.writeData(self.CS, [0xD8, 0x00])
 
 
     def Move(self, units = 0, direction = 0, wait = False):
@@ -575,11 +588,19 @@ class axis:
                         ('MSByte', data[0]),
                         ('LSByte', data[1]),
                         ('SPEED', self._Speed(spd[0] << 16 | spd[1] <<8 | spd[2])),
+                        ('SPEED_RAW', spd[0] << 16 | spd[1] <<8 | spd[2]),
                         ('POSITION', pos),
                         ('POSITION_CLC', pos/(self.microstepping*1.0)),
                         ('DATETIME', time.time())
                         ])
                         #('SPEED', 0)])
+
+            if self.sw_range:
+                (minv, maxv) = self.sw_range
+                pos_sw = (pos-minv)/(maxv-minv)*100.0
+                status['POSITION_SW'] = pos_sw
+                if 0 <= pos_sw <= 100: status['IN_RANGE'] = True
+                else: status['IN_RANGE'] = False
             
             if data[0] == 0:
                 print "i2c problem", bin(data[0]), bin(data[1])
@@ -608,6 +629,11 @@ class axis:
     def SPEED(self):
         return 0x04
 
+    def SetSwRange(self, minv, maxv):
+        self.sw_range = (float(minv), float(maxv))
+
+
+
 
     def getParam(self, param):          #TODO: toto bude nova verze funkce ReadPara, ReadParam uz nepouzivat. Nyni pouzivejte getParam(param)
         self.writeByte(self.CS, 0x20 | param)
@@ -619,13 +645,27 @@ class axis:
         data2 = self.readByte()
         return data0 << 16 | data1 <<8 | data2
 
+    def setParam(self, param, value):
+        self.writeByte(self.CS, 0x00 | param)
+        self.writeByte(self.CS, (value & 0xff0000) >> 16)
+        self.writeByte(self.CS, (value & 0xff00) >> 8)
+        self.writeByte(self.CS, (value & 0xff) >> 0)
 
     #def ReadParam(self, param):
     #    return getParam(param)
 
-
     def getPosition(self):
         return self.getParam(0x01)
+
+    def setPosition(self, position):
+        return self.setParam(0x01, position)
+
+    def setStepMode(self, mode):
+        self.setParam(0x16, mode[0])
+        self.microstepping = mode[1]    
+            #self.writeByte(self.CS, self.L6470_STEP_MODE)      # Microstepping
+            #self.writeByte(self.CS, STEP_MODE[0])      # 0x04 - 1/16
+            #self.microstepping = STEP_MODE[1]
 
 
     #def ReadPosition(self):
@@ -649,7 +689,9 @@ class axis:
     def _IOspeed(self, speed):
         return int((speed * 250e-9)/(2**-28))
 
-    def _Speed(self, speed):
+    def _Speed(self, speed, dir = False):
+        #if dir:
+        #    return (((speed)*2**-28)/250e-9)*-1
+        #else:
         return ((speed)*2**-28)/250e-9
-
 # End Class axis --------------------------------------------------
