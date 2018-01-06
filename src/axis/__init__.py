@@ -655,7 +655,16 @@ class axis:
     #    return getParam(param)
 
     def getPosition(self):
-        return self.getParam(0x01)
+        self.writeByte(self.CS, 0x20 | 0x01)
+        self.writeByte(self.CS, 0x00)
+        data0 = self.readByte()           # 1st byte
+        self.writeByte(self.CS, 0x00)
+        data1 = self.readByte()           # 2nd byte
+        self.writeByte(self.CS, 0x00)
+        data2 = self.readByte()
+        
+        print (data0 << 16 | data1 <<8 | data2)&0x3fffff, '\t', bin(data0 << 16 | data1 <<8 | data2), bin(data0), bin(data1), bin(data2)
+        return (data0 << 16 | data1 <<8 | data2)&0x3fffff
 
     def setPosition(self, position):
         return self.setParam(0x01, position)
