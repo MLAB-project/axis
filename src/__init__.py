@@ -1,5 +1,13 @@
 import time
 
+
+##
+##
+##    stara axis trida
+##
+##
+
+
 class axis:
     def __init__(self, SPI, SPI_CS, Direction, StepsPerUnit = 1, protocol = 'i2c', device_name = 'hbstep'):
         ' One axis of robot '
