@@ -97,7 +97,7 @@ class axis():
     def Setup(self, ResetDevice = True, ACC = None, DEC = None, STALL_TH = None, OCD_TH = None,
         KVAL_HOLD = None, KVAL_RUN = None, KVAL_ACC = None, KVAL_DEC = None, FS_SPD = None, STEP_MODE = None,
         StepsPerUnit = None, MIN_SPEED = None, MAX_SPEED = None, CONFIG = None):
-        
+
         '''
         Reset Axis and set default parameters for H-bridge
 
@@ -129,12 +129,12 @@ class axis():
 
             self.writeByte(self.CS, self.L6470_STALL_TH)      # Stall Treshold setup
             self.writeByte(self.CS, int(STALL_TH/31.25)-1)      # 0x70 = 3.5A
-        
+
         if OCD_TH:
             if OCD_TH > 6000:
                 OCD_TH = 6000
 
-            self.writeByte(self.CS, self.L6470_OCD_TH)      # Over Current Treshold setup 
+            self.writeByte(self.CS, self.L6470_OCD_TH)      # Over Current Treshold setup
             self.writeByte(self.CS, int(OCD_TH/375)-1)      # 0x0A = 4A
 
         if FS_SPD:
@@ -194,22 +194,22 @@ class axis():
             elif MAX_SPEED > 15610: MAX_SPEED = 15610
             speed_value = int((MAX_SPEED * 250e-9)/(2**-18))
             data = [(speed_value >> i & 0xff) for i in (8,0)]
-            self.writeByte(self.CS, self.L6470_MAX_SPEED)       # Max Speed setup 
+            self.writeByte(self.CS, self.L6470_MAX_SPEED)       # Max Speed setup
             self.writeByte(self.CS, data[0])
             self.writeByte(self.CS, data[1])
 
         if MIN_SPEED:
             lspd = 0
             if LSPD_OPT: lspd = 0b10000000
-           
+
             if (MIN_SPEED < 0): MIN_SPEED = 0
             elif (MIN_SPEED > 976.3): MIN_SPEED = 976.3
 
             speed_value = int((MIN_SPEED * 250e-9)/(2**-24))
 
             data = [(speed_value >> i & 0xff) for i in (8,0)]
-            
-            self.writeByte(self.CS, self.L6470_MAX_SPEED)       # Max Speed setup 
+
+            self.writeByte(self.CS, self.L6470_MAX_SPEED)       # Max Speed setup
             self.writeByte(self.CS, data[0] | lspd)
             self.writeByte(self.CS, data[1])
 
@@ -256,11 +256,11 @@ class axis():
 
         self.writeByte(self.CS, self.L6470_STALL_TH)      # Stall Treshold setup
         self.writeByte(self.CS, int(stall_th/31.25)-1)      # 0x70 = 3.5A
-        
+
         if ocd_th > 6000:
             ocd_th = 6000
 
-        self.writeByte(self.CS, self.L6470_OCD_TH)      # Over Current Treshold setup 
+        self.writeByte(self.CS, self.L6470_OCD_TH)      # Over Current Treshold setup
         self.writeByte(self.CS, int(ocd_th/375)-1)      # 0x0A = 4A
 
         self.writeByte(self.CS, self.L6470_FS_SPD)      # Full Step speed, 0x03FF - maximal - always microstepping
@@ -288,7 +288,7 @@ class axis():
         self.MinSpeed(speed = 0x00, LSPD_OPT = True)
 
         self.setConfig(F_PWM_INT = 0b001, F_PWM_DEC = 0b110, POW_SR = 0b00, OC_SD = 0b0, RESERVED = 0b0, EN_VSCOMP =  0b1, SW_MODE = 0b0, EXT_CLK = 0b0, OSC_SEL = 0b000)
-        
+
 
         self.writeByte(self.CS, self.L6470_STEP_MODE)      # Microstepping
         self.writeByte(self.CS, 0x04)      # 0x04 - 1/16
@@ -310,7 +310,7 @@ class axis():
 
 
     def setConfig(self, F_PWM_INT = None, F_PWM_DEC = None, POW_SR = None, OC_SD = None, RESERVED = None, EN_VSCOMP = None, SW_MODE = None, EXT_CLK = None, OSC_SEL = None):
-        
+
         F_PWM_INT = F_PWM_INT if F_PWM_INT else self.config_F_PWM_INT
         F_PWM_DEC = F_PWM_DEC if F_PWM_DEC else self.config_F_PWM_DEC
         POW_SR = POW_SR if POW_SR else self.config_POW_SR
@@ -322,7 +322,7 @@ class axis():
         OSC_SEL = OSC_SEL if OSC_SEL else self.config_OSC_SEL
 
         config = F_PWM_INT << 13 | F_PWM_DEC << 10 | POW_SR << 8 | OC_SD << 7 | RESERVED << 6 | EN_VSCOMP << 5 | SW_MODE << 4 | EXT_CLK << 3 | OSC_SEL << 0
-        
+
         self.config_F_PWM_INT = F_PWM_INT
         self.config_F_PWM_DEC = F_PWM_DEC
         self.config_POW_SR = POW_SR
@@ -342,7 +342,7 @@ class axis():
         self.writeByte(self.CS, data[1])
 
         return config
- 
+
 
     def MaxSpeed(self, speed):
         self.setMaxSpeed(speed)
@@ -356,7 +356,7 @@ class axis():
 
         data = [(speed_value >> i & 0xff) for i in (8,0)]
 
-        self.writeByte(self.CS, self.L6470_MAX_SPEED)       # Max Speed setup 
+        self.writeByte(self.CS, self.L6470_MAX_SPEED)       # Max Speed setup
         self.writeByte(self.CS, data[0])
         self.writeByte(self.CS, data[1])
         return speed
@@ -364,7 +364,7 @@ class axis():
 
     def MinSpeed(self, speed, LSPD_OPT = True):
         self.setMinSpeed(speed, LSPD_OPT)
-      
+
     def setMinSpeed(self, speed, LSPD_OPT = True):
         ' Setup of minimum speed  - 0 to 976 steps/s'
 
@@ -375,8 +375,8 @@ class axis():
 
         data = [(speed_value >> i & 0xff) for i in (8,0)]
 
-        
-        self.writeByte(self.CS, self.L6470_MIN_SPEED)       # Max Speed setup 
+
+        self.writeByte(self.CS, self.L6470_MIN_SPEED)       # Max Speed setup
         self.writeByte(self.CS, data[0])
         self.writeByte(self.CS, data[1])
         return speed
@@ -450,7 +450,7 @@ class axis():
         #while self.ReadStatusBit(2) == 1:
         #    self.writeByte(self.CS, 0b10010010 + int(direction))
         #    time.sleep(0.25)
- 
+
 
     def GoZero(self, speed):
         ' Go to Zero position '
@@ -458,7 +458,7 @@ class axis():
 
         self.writeByte(self.CS, 0x82 | (self.Dir & 1))       # Go to Zero
         self.writeByte(self.CS, 0x00)
-        self.writeByte(self.CS, speed)  
+        self.writeByte(self.CS, speed)
         while self.IsBusy():
             time.sleep(0.25)
         self.ReleaseSW()
@@ -482,7 +482,7 @@ class axis():
 
     def Move(self, units = 0, direction = 0, wait = False):
         ' Move some distance units from current position'
-        
+
         steps = int(abs(self._units2steps(units)))
         print("Move: steps: %s, units %s" %(steps, units))
 
@@ -543,7 +543,7 @@ class axis():
         self.writeByte(self.CS, 0x00)
         data = [self.readByte()]
         self.writeByte(self.CS, 0x00)
-        data += [self.readByte()] 
+        data += [self.readByte()]
         return (data[0] << 8 | data[1])
         '''
 
@@ -556,9 +556,9 @@ class axis():
         self.writeByte(self.CS, 0x00)
         data |= self.readByte()
 
-        return (data >> bit) & 1 
+        return (data >> bit) & 1
 
-   
+
     def getStatus(self):
         try:
             #print "GetStatus"
@@ -613,7 +613,7 @@ class axis():
                 status['POSITION_SW'] = pos_sw
                 if 0 <= pos_sw <= 100: status['IN_RANGE'] = True
                 else: status['IN_RANGE'] = False
-            
+
             if data[0] == 0:
                 print("i2c problem", bin(data[0]), bin(data[1]))
 
@@ -622,7 +622,7 @@ class axis():
 
             self.last_status = status
             return status
-            
+
         except Exception as e:
             print("GetStatusErr>>", e)
             return (dict())
@@ -679,7 +679,7 @@ class axis():
         data1 = self.readByte()           # 2nd byte
         self.writeByte(self.CS, 0x00)
         data2 = self.readByte()
-        
+
         #print (data0 << 16 | data1 <<8 | data2)&0x3fffff, '\t', bin(data0 << 16 | data1 <<8 | data2), bin(data0), bin(data1), bin(data2)
         return (data0 << 16 | data1 <<8 | data2)&0x3fffff
 
@@ -688,7 +688,7 @@ class axis():
 
     def setStepMode(self, mode):
         self.setParam(0x16, mode[0])
-        self.microstepping = mode[1]    
+        self.microstepping = mode[1]
         #self.writeByte(self.CS, self.L6470_STEP_MODE)      # Microstepping
         #self.writeByte(self.CS, STEP_MODE[0])      # 0x04 - 1/16
         #self.microstepping = STEP_MODE[1]
@@ -696,7 +696,7 @@ class axis():
 
     #def ReadPosition(self):
     #    return self.getPosition()
-    
+
     def Wait(self, delay = 0.2, maximal_time = False, print_pos = False):
         start = time.time()
         while self.IsBusy() and (not maximal_time or maximal_time < time.time() - start):
@@ -737,7 +737,7 @@ class axis():
 
 
 class axis_between(axis):
-    
+
     def search_range(self, def_dir = False):
         '''
             Tato funkce najde koncove stupne a snazi se
@@ -766,8 +766,29 @@ class axis_between(axis):
         self.Wait()
 
         if def_dir: first = 0x3fffff
-        else: first = 0x0 
+        else: first = 0x0
         second = self.getStatus()['POSITION']
 
         if def_dir: print("delka drahy je %s kroku" %(first - second))
         else: print("delka drahy je %s kroku" %(second - first))
+
+
+
+    def validate_switch(self, gpio_device, pin, polarity = True, delay = 0.1):
+        if not isinstance(pin, list):
+            pin = [pin]
+            
+        out = []
+        for p in pin:
+            gpio_device.output(p, 1)
+            time.sleep(delay)
+            sw1 = self.getStatus()['SW_F']
+            gpio_device.output(p, 0)
+            time.sleep(delay)
+            sw2 = self.getStatus()['SW_F']
+            if sw1 == sw2:
+                out.append(False)
+            else:
+                out.append(True)
+
+        return out

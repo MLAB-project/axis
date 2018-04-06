@@ -19,12 +19,17 @@ cfg = config.Config(
         "name":"spi", 
         "type":"i2cspi"
         },
+        {
+        "name": "gpio",
+        "type": "USBI2C_gpio"
+        }
     ],
 )
 
 
 cfg.initialize()
 spi = cfg.get_device("spi")
+gpio = cfg.get_device("gpio")
 spi.SPI_config(spi.I2CSPI_MSB_FIRST| spi.I2CSPI_MODE_CLK_IDLE_HIGH_DATA_EDGE_TRAILING| spi.I2CSPI_CLK_461kHz)
 
 
@@ -37,7 +42,9 @@ motor.setStepsPerUnit(SPU = 200)
 #motor.setConfig(EXT_CLK = 0b1, OSC_SEL = 0b110) # Ext clock source: 24 MHz(Crystal/resonator driver disabled)
 
 motor.Float()
-print motor.getStatus()
+#print motor.getStatus()
+
+gpio.test()
 
 
 print("Direction one")
