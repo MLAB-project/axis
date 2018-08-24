@@ -4,6 +4,7 @@
 import time
 import sys
 import datetime
+import math
 
 class axis():
     STEP_MODE_FULL = [0b000, 1]
@@ -32,6 +33,7 @@ class axis():
 
         self.virtualPosition = 0
         self.virtualPositionLast = 0
+        self.virtualDeltaLast = None
         self.virtualRound = 0
 
         self.virtualGoToLastTarget = 0
@@ -436,10 +438,114 @@ class axis():
 
 
     def goto_virtual(self, position, direction = None, wait = False, currentPosition = None, moveDistance = 2**16, speed = 60000):
+        status = self.getStatus()
         if not currentPosition:
-            currentPosition = self.virtual_position()
+            currentPosition = status.get('VIRTUAL_POSITION')
         delta = currentPosition-position
+        if self.virtualDeltaLast == None:
+            print("Prvni delta...")
+            self.Float()
+            self.virtualDeltaLast = delta
+        move = bool(status.get('SPEED_RAW'))
 
+        l = 0b11111111111111111111
+
+        #print("\t \t \t \t \t \t Pos: {:08.0f}, cur: {:08.0f}, err: {:08.0f}, check: {:08.0f}".format(position, currentPosition, delta, abs(delta) >  3000*128))
+
+
+        if delta > l: delta = l
+        if delta < -l: delta = -l
+        print("Delta", delta)
+        if abs(delta/128) < 500:
+            return 0
+        self.Move(delta/128.0)
+
+
+        #print(delta, abs(delta) < 500*128)
+        #if not move:
+        #    if delta > 0:
+        #        print("Hybej se! a")
+        #        self.Run(0, 80000)
+        #    if delta < 0:
+        #        print("Hybej se! b")
+        #        self.Run(1, 80000)
+        #    return 1
+        #else:
+        #    if abs(delta) < 500*128:
+        ##        self.Float()
+        #        print("OK")
+        #        return 0
+        #    return 1
+        '''
+        l = 0b111111111111
+
+
+        print("\t \t \t \t \t \t Pos: {}, cur: {}, err: {}, check: {}".format(position, currentPosition, delta, abs(delta) >  3000*128))
+        
+
+        if abs(delta) > 2000*128 and not move:
+            if delta > 0:
+                #self.Move(2000*128, mode='steps', wait=True)
+                self.MoveWait(2100)
+                print("Move 1", 2100, position, currentPosition, delta)
+            else:
+                #self.Move(-2000*128, mode='steps', wait=True)
+                self.MoveWait(-2100)
+                print("Move 2", -2100, position, currentPosition, delta)
+            return 2
+
+
+        elif abs(delta) < 300:
+            print("MOVEVIRTUAL - DONE")            
+            self.virtualDeltaLast = None
+            return 0
+
+
+        elif delta < 0 and not move:
+            #self.Float()
+            #self.Wait()
+            currentPosition = self.virtual_position()
+            delta = (currentPosition-position)
+            self.MoveWait(-50)
+            newPosition = self.virtual_position()
+            #self.Move(delta, wait = True, mode='steps')
+            print("Move 3", position, currentPosition, delta, currentPosition-newPosition)
+            return 1
+
+        elif delta > 0 and not move:
+            #self.Float()
+            #self.Wait()
+            currentPosition = self.virtual_position()
+            delta = (currentPosition-position)
+            self.MoveWait(50)
+            newPosition = self.virtual_position()
+            #self.Move(delta, wait = True, mode='steps')
+            print("Move 3", position, currentPosition, delta, currentPosition-newPosition)
+            return 1
+        '''
+
+        '''
+        elif abs(delta) <= 2000*128 and not move:
+            self.Float()
+            self.Wait()
+            currentPosition = self.virtual_position()
+            delta = (currentPosition-position)
+            self.MoveWait((delta/200.0))
+            newPosition = self.virtual_position()
+            #self.Move(delta, wait = True, mode='steps')
+            print("Move 3", position, currentPosition, delta, currentPosition-newPosition)
+            return 1
+        '''
+
+        '''
+        # pokud se nam chyba zvetsuje
+        if abs(delta) > abs(self.virtualDeltaLast):
+            print("Error is getting bigger")
+            self.Float()
+            virtualGoToState = 4
+            self.virtualDeltaLast = delta
+
+        # Pokud motor neni na spravne hodnote
         if self.virtualGoToLastTarget != position:
             print("GOTOV INIT")
             self.virtualGoToState = 4
@@ -450,21 +556,28 @@ class axis():
         
 
         if -200 < delta and 200 > delta:
+            if not self.virtualGoToState:
+                self.Float()
+                print("GOTOV ----- DONE :)")
             self.virtualGoToState = 0
-            self.Float()
-            print("GOTOV ----- DONE :)")
             return 0
 
-
+        # pokud je motor v rozsahu registru, pouzij metodu MOVE
         elif -1*moveDistance < delta and moveDistance > delta and self.virtualGoToState > 2:
             print("GOTOV ----- BETWEEN")
             self.virtualGoToState = 2
             self.Float()
-            #time.sleep(3)
             self.Wait()
+            time.sleep(0.2)
             currentPosition = self.virtual_position()
             self.Move(currentPosition-position, wait = wait, mode='steps')
-        
+
+        # pokud je motor v rozsahu vnitniho registru, ale zastavil se
+        elif -1*moveDistance < delta and moveDistance > delta:
+            if not self.getStatus().get('BUSY', False):
+                print("Should be false:", self.getStatus().get('BUSY', "Err"))
+                print("GOTOV ----- BETWEEN - repair")
+                self.virtualGoToState = 3
         
         elif delta < (-1*moveDistance) and self.virtualGoToState != -3:
             print("GOTOV ----- ERR -")
@@ -475,7 +588,8 @@ class axis():
             print("GOTOV ----- ERR +")
             self.Run(False, speed)
             self.virtualGoToState = 3
-
+        
+        '''
         return -1
 
 
@@ -563,7 +677,7 @@ class axis():
         ' Move some distance units from current position'
 
         if mode == 'steps':
-            steps = units
+            steps = int(units)
         else:
             steps = int(abs(self._units2steps(units)))
         #steps = units
@@ -613,7 +727,7 @@ class axis():
 
     def Float(self):
         ' switch H-bridge to High impedance state '
-        print("switch H-bridge to High impedance state")
+        #print("switch H-bridge to High impedance state")
         self.writeByte( 0xA0)
 
 
@@ -664,11 +778,15 @@ class axis():
 
             spd_c = 0
             pos = self.getPosition()
+            pos2 = self.getPosition()
+            #if abs(pos - pos2) > 10000:
+            #    print(pos, pos2)
+            #    #raise Exception("Driver read error")
             vpos = self.virtual_position(pos)
-            if (self.last_pos_date + 10) < time.time():
-                spd_c = (self.last_pos - pos)/(self.last_pos_date - time.time())
-                self.last_pos = pos
-                self.last_pos_date = time.time()
+            #if (self.last_pos_date + 10) < time.time():
+            #    spd_c = (self.last_pos - pos)/(self.last_pos_date - time.time())
+            #    self.last_pos = pos
+            #    self.last_pos_date = time.time()
 
             status = dict()
             status = dict([('SCK_MOD',data[0] & 0x80 == 0x80),  #The SCK_MOD bit is an active high flag indicating that the device is working in Step-clock mode. In this case the step-clock signal should be provided through the STCK input pin. The DIR bit indicates the current motor direction
@@ -690,7 +808,7 @@ class axis():
                         ('LSByte', data[1]),
                         ('SPEED', self._Speed(spd[0] << 16 | spd[1] <<8 | spd[2])),
                         ('SPEED_RAW', spd[0] << 16 | spd[1] <<8 | spd[2]),
-                        ('SPEED_C', spd_c),
+                        #('SPEED_C', spd_c),
                         ('POSITION', pos),
                         ('VIRTUAL_POSITION', vpos),
                         ('VIRTUAL_ROUND', self.virtualRound),
@@ -795,16 +913,18 @@ class axis():
         regLenght = 2**22
         if not position:
             position = self.getPosition()
+            #pos2 = self.getPosition()
+            #print("vpos:", position, pos2)
         lastPosition = self.virtualPositionLast
         self.virtualPositionLast = position
 
         if lastPosition > regLenght*2/3 and position < regLenght*1/3:
             self.virtualRound += 1
-            print("# Buffer pretekl nahoru, pouzivame nasobek {}".format(self.virtualRound))
+            print("# Buffer pretekl nahoru, pouzivame nasobek {}, Position: {}, Last: {}".format(self.virtualRound, position, lastPosition))
         
         elif lastPosition < regLenght*1/3 and position > regLenght*2/3:
             self.virtualRound -= 1
-            print("# Buffer pretekl dolu, pouzivame nasobek {}".format(self.virtualRound))
+            print("# Buffer pretekl dolu, pouzivame nasobek {}, Position: {}, Last: {}".format(self.virtualRound, position, lastPosition))
 
         return regLenght*self.virtualRound + position
 
