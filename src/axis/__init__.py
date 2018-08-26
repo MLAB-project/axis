@@ -457,6 +457,7 @@ class axis():
         if delta < -l: delta = -l
         print("Delta", delta)
         if abs(delta/128) < 500:
+            self.virtualDeltaLast = None
             return 0
         self.Move(delta/128.0)
 
