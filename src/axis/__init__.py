@@ -738,10 +738,22 @@ class axis():
 
 class axis_between(axis):
 
-    def search_range(self, def_dir = False):
+    def search_range(self, def_dir, usbi2c, gpio_pins):
         '''
             Tato funkce najde koncove stupne a snazi se
         '''
+
+        (a,b) = self.validate_switch(usbi2c, gpio_pins)
+        print ("Stavy tracitek", a, b)
+
+        if a:
+            self.Move(10000, 0)
+            self.Wait()
+        
+        if b:
+            self.Move(10000, 1)
+            self.Wait()
+
 
         if self.getStatus()['SW_F']:
             print("\nERR...\nJsme na koncaku, uvolnete koncak\n")
@@ -750,20 +762,39 @@ class axis_between(axis):
         self.def_dir = def_dir
 
         # cesta na koncak
-        self.GoUntil(direction = self.def_dir, speed = 200, ACT = False)
+        print("Cesta na prvni koncak")
+        self.GoUntil(direction = self.def_dir, speed = 100, ACT = False)
         self.Wait()
 
+
+        (a,b) = self.validate_switch(usbi2c, gpio_pins)
+        print ("Stavy tracitek", a, b)
+
         # opustit koncak + vynulovat registr
+        print("Cesta opustit prvni koncak")
         self.ReleaseSW(direction = not self.def_dir, ACT = False)
         self.Wait()
 
+
+        (a,b) = self.validate_switch(usbi2c, gpio_pins)
+        print ("Stavy tracitek", a, b)
+
         time.sleep(0.5)
 
-        self.GoUntil(direction = not self.def_dir, speed = 200, ACT = True)
+        print("Cesta na druhy koncak")
+        self.GoUntil(direction = not self.def_dir, speed = 100, ACT = True)
         self.Wait(print_pos = True)
 
-        self.ReleaseSW(direction = self.def_dir, ACT = True)
+
+        (a,b) = self.validate_switch(usbi2c, gpio_pins)
+        print ("Stavy tracitek", a, b)
+
+        print("Cesta opustit druhy")
+        self.ReleaseSW(direction = self.def_dir, ACT = False)
         self.Wait()
+
+        (a,b) = self.validate_switch(usbi2c, gpio_pins)
+        print ("Stavy tracitek", a, b)
 
         if def_dir: first = 0x3fffff
         else: first = 0x0
@@ -774,7 +805,7 @@ class axis_between(axis):
 
 
 
-    def validate_switch(self, gpio_device, pin, polarity = True, delay = 0.1):
+    def validate_switch(self, gpio_device, pin, polarity = True, delay = 0.01):
         if not isinstance(pin, list):
             pin = [pin]
             
