@@ -4,6 +4,7 @@
 import time
 import sys
 import datetime
+import math
 
 class axis():
     STEP_MODE_FULL = [0b000, 1]
@@ -26,8 +27,16 @@ class axis():
         self.SPU = StepsPerUnit
         self.sw_range = None
         self.last_status = {}
+        self.last_pos = 0
+        self.last_pos_date = 0
         self.statusCallback = None
 
+        self.virtualPosition = 0
+        self.virtualPositionLast = 0
+        self.virtualDeltaLast = None
+        self.virtualRound = 0
+
+        self.virtualGoToLastTarget = 0
 
         self.L6470_ABS_POS      =0x01
         self.L6470_EL_POS       =0x02
@@ -69,13 +78,14 @@ class axis():
 
 
 
-    def writeByte(self, CS, address):
+    def writeByte(self, address):
         if self.protocol == 'i2c':
             return self.spi.SPI_write_byte(self.CS, address)
         elif self.protocol == 'spi':
             return "Err. SPI neni podporovano"
         elif self.protocol == 'arom':
-            return eval(self.spi(device=self.arom_spi_name, method="SPI_write_byte", parameters=str((self.CS,address))).value) # self.spi.I2CSPI_MSB_FIRST| self.spi.I2CSPI_MODE_CLK_IDLE_HIGH_DATA_EDGE_TRAILING| self.spi.I2CSPI_CLK_461kHz
+            response = self.spi(device=self.arom_spi_name, method="SPI_write_byte", parameters=str((self.CS,address)))
+            return eval(response.value) # self.spi.I2CSPI_MSB_FIRST| self.spi.I2CSPI_MODE_CLK_IDLE_HIGH_DATA_EDGE_TRAILING| self.spi.I2CSPI_CLK_461kHz
 
     def readByte(self):
         if self.protocol == 'i2c':
@@ -116,34 +126,31 @@ class axis():
         FS_SPD -- Fullstep speed (default: 0x027)
         '''
         if ResetDevice:
-            self.writeByte(self.CS, 0b11000000)
+            self.writeByte( 0b11000000)
 
-        if StepsPerUnit:
-            self.writeByte(self.CS, self.L6470_STEP_MODE)      # Microstepping
-            self.writeByte(self.CS, StepsPerUnit[0])
-            self.SPU = StepsPerUnit[1]
+        self.SPU = 1
 
         if STALL_TH:
             if STALL_TH > 4000:
                 STALL_TH = 4000
 
-            self.writeByte(self.CS, self.L6470_STALL_TH)      # Stall Treshold setup
-            self.writeByte(self.CS, int(STALL_TH/31.25)-1)      # 0x70 = 3.5A
+            self.writeByte( self.L6470_STALL_TH)      # Stall Treshold setup
+            self.writeByte( int(STALL_TH/31.25)-1)      # 0x70 = 3.5A
 
         if OCD_TH:
             if OCD_TH > 6000:
                 OCD_TH = 6000
 
-            self.writeByte(self.CS, self.L6470_OCD_TH)      # Over Current Treshold setup
-            self.writeByte(self.CS, int(OCD_TH/375)-1)      # 0x0A = 4A
+            self.writeByte( self.L6470_OCD_TH)      # Over Current Treshold setup
+            self.writeByte( int(OCD_TH/375)-1)      # 0x0A = 4A
 
         if FS_SPD:
             if FS_SPD < 0: FS_SPD = 0
             if FS_SPD > 15610: FS_SPD=15610
             FS_SPD_value = int(((FS_SPD+0.5) * 250e-9)/(2**-18))
-            self.writeByte(self.CS, self.L6470_FS_SPD)      # Full Step speed, 0x03FF - maximal - always microstepping
-            self.writeByte(self.CS, (FS_SPD_value >> 8) & 0xFF)
-            self.writeByte(self.CS, (FS_SPD_value >> 0) & 0xFF)
+            self.writeByte( self.L6470_FS_SPD)      # Full Step speed, 0x03FF - maximal - always microstepping
+            self.writeByte( (FS_SPD_value >> 8) & 0xFF)
+            self.writeByte( (FS_SPD_value >> 0) & 0xFF)
 
         # KAVL hodnoty v rozsahu 0-1
         # KVAL values in range 0-1
@@ -151,52 +158,52 @@ class axis():
         if KVAL_HOLD:
             if KVAL_HOLD < 0: KVAL_HOLD = 0
             elif KVAL_HOLD > 0.9961: KVAL_HOLD = 0.9961
-            self.writeByte(self.CS, self.L6470_KVAL_HOLD)
-            self.writeByte(self.CS, KVAL_HOLD)
+            self.writeByte( self.L6470_KVAL_HOLD)
+            self.writeByte( KVAL_HOLD)
 
         if KVAL_RUN:
             if KVAL_RUN < 0: KVAL_RUN = 0
             elif KVAL_RUN > 0.9961: KVAL_RUN = 0.9961
-            self.writeByte(self.CS, self.L6470_KVAL_RUN)
-            self.writeByte(self.CS, int(255.0*KVAL_RUN))
+            self.writeByte( self.L6470_KVAL_RUN)
+            self.writeByte( int(255.0*KVAL_RUN))
 
         if KVAL_ACC:
             if KVAL_ACC < 0: KVAL_ACC = 0
             elif KVAL_ACC > 0.9961: KVAL_ACC = 0.9961
-            self.writeByte(self.CS, self.L6470_KVAL_ACC)
-            self.writeByte(self.CS, int(256.0*KVAL_ACC))
+            self.writeByte( self.L6470_KVAL_ACC)
+            self.writeByte( int(256.0*KVAL_ACC))
 
         if KVAL_DEC:
             if KVAL_DEC < 0: KVAL_DEC = 0
             elif KVAL_DEC > 0.9961: KVAL_DEC = 0.9961
-            self.writeByte(self.CS, self.L6470_KVAL_DEC)
-            self.writeByte(self.CS, int(256.0*KVAL_DEC))
+            self.writeByte( self.L6470_KVAL_DEC)
+            self.writeByte( int(256.0*KVAL_DEC))
 
         if ACC:
             if ACC < 14.55: ACC = 14.55
             elif ACC > 59590: ACC = 59590
             ACC_value = int(ACC * (250e-9)**2/(2**-40))
             if ACC_value == 0xFFF: ACC_value = 0xFFE
-            self.writeByte(self.CS, self.L6470_ACC)      # ACC (0x008a)
-            self.writeByte(self.CS, (ACC_value >> 8) & 0xFF)
-            self.writeByte(self.CS, (ACC_value >> 0) & 0xFF)
+            self.writeByte( self.L6470_ACC)      # ACC (0x008a)
+            self.writeByte( (ACC_value >> 8) & 0xFF)
+            self.writeByte( (ACC_value >> 0) & 0xFF)
 
         if DEC:
             if DEC < 14.55: DEC = 14.55
             elif DEC > 59590: DEC = 59590
             DEC_value = int((DEC * (250e-9)**2)/(2**-40))
-            self.writeByte(self.CS, self.L6470_DEC)      # DEC (0x008a)
-            self.writeByte(self.CS, (DEC_value >> 8) & 0xFF)
-            self.writeByte(self.CS, (DEC_value >> 0) & 0xFF)
+            self.writeByte( self.L6470_DEC)      # DEC (0x008a)
+            self.writeByte( (DEC_value >> 8) & 0xFF)
+            self.writeByte( (DEC_value >> 0) & 0xFF)
 
         if MAX_SPEED:
             if MAX_SPEED < 15.25: MAX_SPEED = 15.25
             elif MAX_SPEED > 15610: MAX_SPEED = 15610
             speed_value = int((MAX_SPEED * 250e-9)/(2**-18))
             data = [(speed_value >> i & 0xff) for i in (8,0)]
-            self.writeByte(self.CS, self.L6470_MAX_SPEED)       # Max Speed setup
-            self.writeByte(self.CS, data[0])
-            self.writeByte(self.CS, data[1])
+            self.writeByte( self.L6470_MAX_SPEED)       # Max Speed setup
+            self.writeByte( data[0])
+            self.writeByte( data[1])
 
         if MIN_SPEED:
             lspd = 0
@@ -209,25 +216,22 @@ class axis():
 
             data = [(speed_value >> i & 0xff) for i in (8,0)]
 
-            self.writeByte(self.CS, self.L6470_MAX_SPEED)       # Max Speed setup
-            self.writeByte(self.CS, data[0] | lspd)
-            self.writeByte(self.CS, data[1])
+            self.writeByte( self.L6470_MAX_SPEED)       # Max Speed setup
+            self.writeByte( data[0] | lspd)
+            self.writeByte( data[1])
 
         if CONFIG:
             print("config:", CONFIG)
 
-        if STEP_MODE:
-            print("strep mode:", STEP_MODE)
-            self.writeByte(self.CS, self.L6470_STEP_MODE)      # Microstepping
-            self.writeByte(self.CS, STEP_MODE[0])      # 0x04 - 1/16
-            self.microstepping = STEP_MODE[1]
-        else:
-            self.writeByte(self.CS, self.L6470_STEP_MODE)      # Microstepping
-            self.writeByte(self.CS, self.STEP_MODE_1_16[0])      # 0x04 - 1/16
-            self.microstepping = self.STEP_MODE_1_16[1]
+        if not STEP_MODE: STEP_MODE = self.STEP_MODE_1_16
+        print("strep mode:", STEP_MODE)
+        self.set_stepmode(STEP_MODE)    
 
 
-
+    def set_stepmode(self, mode):
+            self.writeByte( self.L6470_STEP_MODE)      # Microstepping
+            self.writeByte( mode[0])
+            self.microstepping = mode[1]
 
     def Reset(self, init = True, ACC = 0x00a, DEC = 0x00a, stall_th = 2030, ocd_th = 3380, KVAL_HOLD = 0x29, KVAL_RUN = 0x29, KVAL_ACC = 0x29, KVAL_DEC = 0x29, FS_SPD = 0x027):
         '''
@@ -249,57 +253,57 @@ class axis():
         '''
 
         if init:
-            self.writeByte(self.CS, 0xC0)      # reset OC
+            self.writeByte( 0xC0)      # reset OC
 
         if stall_th > 4000:
             stall_th = 4000
 
-        self.writeByte(self.CS, self.L6470_STALL_TH)      # Stall Treshold setup
-        self.writeByte(self.CS, int(stall_th/31.25)-1)      # 0x70 = 3.5A
+        self.writeByte( self.L6470_STALL_TH)      # Stall Treshold setup
+        self.writeByte( int(stall_th/31.25)-1)      # 0x70 = 3.5A
 
         if ocd_th > 6000:
             ocd_th = 6000
 
-        self.writeByte(self.CS, self.L6470_OCD_TH)      # Over Current Treshold setup
-        self.writeByte(self.CS, int(ocd_th/375)-1)      # 0x0A = 4A
+        self.writeByte( self.L6470_OCD_TH)      # Over Current Treshold setup
+        self.writeByte( int(ocd_th/375)-1)      # 0x0A = 4A
 
-        self.writeByte(self.CS, self.L6470_FS_SPD)      # Full Step speed, 0x03FF - maximal - always microstepping
-        #self.writeByte(self.CS, (FS_SPD >>16) & 0xFF)
-        self.writeByte(self.CS, (FS_SPD >> 8) & 0xFF)
-        self.writeByte(self.CS, (FS_SPD >> 0) & 0xFF)
+        self.writeByte( self.L6470_FS_SPD)      # Full Step speed, 0x03FF - maximal - always microstepping
+        #self.writeByte( (FS_SPD >>16) & 0xFF)
+        self.writeByte( (FS_SPD >> 8) & 0xFF)
+        self.writeByte( (FS_SPD >> 0) & 0xFF)
 
 
-        self.writeByte(self.CS, self.L6470_ACC)      # ACC (0x008a)
-        self.writeByte(self.CS, (ACC >> 8) & 0xFF)
-        self.writeByte(self.CS, (ACC >> 0) & 0xFF)
-        self.writeByte(self.CS, self.L6470_DEC)      # DEC (0x008a)
-        self.writeByte(self.CS, (DEC >> 8) & 0xFF)
-        self.writeByte(self.CS, (DEC >> 0) & 0xFF)
+        self.writeByte( self.L6470_ACC)      # ACC (0x008a)
+        self.writeByte( (ACC >> 8) & 0xFF)
+        self.writeByte( (ACC >> 0) & 0xFF)
+        self.writeByte( self.L6470_DEC)      # DEC (0x008a)
+        self.writeByte( (DEC >> 8) & 0xFF)
+        self.writeByte( (DEC >> 0) & 0xFF)
 
-        self.writeByte(self.CS, self.L6470_KVAL_HOLD)
-        self.writeByte(self.CS, KVAL_HOLD)
-        self.writeByte(self.CS, self.L6470_KVAL_RUN)
-        self.writeByte(self.CS, KVAL_RUN)
-        self.writeByte(self.CS, self.L6470_KVAL_ACC)
-        self.writeByte(self.CS, KVAL_ACC)
-        self.writeByte(self.CS, self.L6470_KVAL_DEC)
-        self.writeByte(self.CS, KVAL_DEC)
+        self.writeByte( self.L6470_KVAL_HOLD)
+        self.writeByte( KVAL_HOLD)
+        self.writeByte( self.L6470_KVAL_RUN)
+        self.writeByte( KVAL_RUN)
+        self.writeByte( self.L6470_KVAL_ACC)
+        self.writeByte( KVAL_ACC)
+        self.writeByte( self.L6470_KVAL_DEC)
+        self.writeByte( KVAL_DEC)
 
         self.MinSpeed(speed = 0x00, LSPD_OPT = True)
 
         self.setConfig(F_PWM_INT = 0b001, F_PWM_DEC = 0b110, POW_SR = 0b00, OC_SD = 0b0, RESERVED = 0b0, EN_VSCOMP =  0b1, SW_MODE = 0b0, EXT_CLK = 0b0, OSC_SEL = 0b000)
 
 
-        self.writeByte(self.CS, self.L6470_STEP_MODE)      # Microstepping
-        self.writeByte(self.CS, 0x04)      # 0x04 - 1/16
+        self.writeByte( self.L6470_STEP_MODE)      # Microstepping
+        self.writeByte( 0x04)      # 0x04 - 1/16
         self.microstepping = 16
 
 
     def clearStatus(self):
-        self.writeByte(self.CS, self.L6470_ABS_POS)
-        self.writeByte(self.CS, 0x00)
-        self.writeByte(self.CS, 0x00)
-        self.writeByte(self.CS, 0x00)
+        self.writeByte( self.L6470_ABS_POS)
+        self.writeByte( 0x00)
+        self.writeByte( 0x00)
+        self.writeByte( 0x00)
 
     def setStepsPerUnit(self, SPU):
         if SPU > 0:
@@ -337,9 +341,9 @@ class axis():
 
         data = [(config >> i & 0xff) for i in (8,0)]
 
-        self.writeByte(self.CS, self.L6470_CONFIG)
-        self.writeByte(self.CS, data[0])
-        self.writeByte(self.CS, data[1])
+        self.writeByte( self.L6470_CONFIG)
+        self.writeByte( data[0])
+        self.writeByte( data[1])
 
         return config
 
@@ -356,9 +360,9 @@ class axis():
 
         data = [(speed_value >> i & 0xff) for i in (8,0)]
 
-        self.writeByte(self.CS, self.L6470_MAX_SPEED)       # Max Speed setup
-        self.writeByte(self.CS, data[0])
-        self.writeByte(self.CS, data[1])
+        self.writeByte( self.L6470_MAX_SPEED)       # Max Speed setup
+        self.writeByte( data[0])
+        self.writeByte( data[1])
         return speed
 
 
@@ -376,9 +380,9 @@ class axis():
         data = [(speed_value >> i & 0xff) for i in (8,0)]
 
 
-        self.writeByte(self.CS, self.L6470_MIN_SPEED)       # Max Speed setup
-        self.writeByte(self.CS, data[0])
-        self.writeByte(self.CS, data[1])
+        self.writeByte( self.L6470_MIN_SPEED)       # Max Speed setup
+        self.writeByte( data[0])
+        self.writeByte( data[1])
         return speed
 
     def getMinSpeed(self):
@@ -403,10 +407,10 @@ class axis():
     def GoTo(self, abspos, wait=False, float = True):
         data = [(abspos*self.SPU >> i & 0xff) for i in (16,8,0)]
 
-        self.writeByte(self.CS, 0b01100000)
-        self.writeByte(self.CS, data[0])
-        self.writeByte(self.CS, data[1])
-        self.writeByte(self.CS, data[2])
+        self.writeByte( 0b01100000)
+        self.writeByte( data[0])
+        self.writeByte( data[1])
+        self.writeByte( data[2])
 
         while self.IsBusy() and wait:
             time.sleep(0.25)
@@ -419,10 +423,10 @@ class axis():
     def GoToDir(self, speed, direction = 1, wait=False, float = True):
         data = [(speed*self.SPU >> i & 0xff) for i in (16,8,0)]
 
-        self.writeByte(self.CS, 0b01101000 + int(direction))
-        self.writeByte(self.CS, data[0])
-        self.writeByte(self.CS, data[1])
-        self.writeByte(self.CS, data[2])
+        self.writeByte( 0b01101000 + int(direction))
+        self.writeByte( data[0])
+        self.writeByte( data[1])
+        self.writeByte( data[2])
 
         while self.IsBusy() and wait:
             time.sleep(0.25)
@@ -432,23 +436,213 @@ class axis():
 
         return speed
 
+
+    def goto_virtual(self, position, direction = None, wait = False, currentPosition = None, moveDistance = 2**16, speed = 60000):
+        status = self.getStatus()
+        if not currentPosition:
+            currentPosition = status.get('VIRTUAL_POSITION')
+        delta = currentPosition-position
+        if self.virtualDeltaLast == None:
+            print("Prvni delta...")
+            self.Float()
+            self.virtualDeltaLast = delta
+        move = bool(status.get('SPEED_RAW'))
+
+        l = 0b11111111111111111111
+
+        #print("\t \t \t \t \t \t Pos: {:08.0f}, cur: {:08.0f}, err: {:08.0f}, check: {:08.0f}".format(position, currentPosition, delta, abs(delta) >  3000*128))
+
+
+        if delta > l: delta = l
+        if delta < -l: delta = -l
+        print("Delta", delta)
+        if abs(delta/128) < 500:
+            self.virtualDeltaLast = None
+            return 0
+        self.Move(delta/128.0)
+
+
+        #print(delta, abs(delta) < 500*128)
+        #if not move:
+        #    if delta > 0:
+        #        print("Hybej se! a")
+        #        self.Run(0, 80000)
+        #    if delta < 0:
+        #        print("Hybej se! b")
+        #        self.Run(1, 80000)
+        #    return 1
+        #else:
+        #    if abs(delta) < 500*128:
+        ##        self.Float()
+        #        print("OK")
+        #        return 0
+        #    return 1
+        '''
+        l = 0b111111111111
+
+
+        print("\t \t \t \t \t \t Pos: {}, cur: {}, err: {}, check: {}".format(position, currentPosition, delta, abs(delta) >  3000*128))
+        
+
+        if abs(delta) > 2000*128 and not move:
+            if delta > 0:
+                #self.Move(2000*128, mode='steps', wait=True)
+                self.MoveWait(2100)
+                print("Move 1", 2100, position, currentPosition, delta)
+            else:
+                #self.Move(-2000*128, mode='steps', wait=True)
+                self.MoveWait(-2100)
+                print("Move 2", -2100, position, currentPosition, delta)
+            return 2
+
+
+        elif abs(delta) < 300:
+            print("MOVEVIRTUAL - DONE")            
+            self.virtualDeltaLast = None
+            return 0
+
+
+        elif delta < 0 and not move:
+            #self.Float()
+            #self.Wait()
+            currentPosition = self.virtual_position()
+            delta = (currentPosition-position)
+            self.MoveWait(-50)
+            newPosition = self.virtual_position()
+            #self.Move(delta, wait = True, mode='steps')
+            print("Move 3", position, currentPosition, delta, currentPosition-newPosition)
+            return 1
+
+        elif delta > 0 and not move:
+            #self.Float()
+            #self.Wait()
+            currentPosition = self.virtual_position()
+            delta = (currentPosition-position)
+            self.MoveWait(50)
+            newPosition = self.virtual_position()
+            #self.Move(delta, wait = True, mode='steps')
+            print("Move 3", position, currentPosition, delta, currentPosition-newPosition)
+            return 1
+        '''
+
+        '''
+        elif abs(delta) <= 2000*128 and not move:
+            self.Float()
+            self.Wait()
+            currentPosition = self.virtual_position()
+            delta = (currentPosition-position)
+            self.MoveWait((delta/200.0))
+            newPosition = self.virtual_position()
+            #self.Move(delta, wait = True, mode='steps')
+            print("Move 3", position, currentPosition, delta, currentPosition-newPosition)
+            return 1
+        '''
+
+        '''
+        # pokud se nam chyba zvetsuje
+        if abs(delta) > abs(self.virtualDeltaLast):
+            print("Error is getting bigger")
+            self.Float()
+            virtualGoToState = 4
+            self.virtualDeltaLast = delta
+
+        # Pokud motor neni na spravne hodnote
+        if self.virtualGoToLastTarget != position:
+            print("GOTOV INIT")
+            self.virtualGoToState = 4
+            self.virtualGoToLastTarget = position
+
+        #print(position, currentPosition, "ERR", currentPosition-position, "dist", abs(currentPosition - position) < moveDistance, moveDistance)
+        print("\t \t \t \t \t \t Pos: {}, cur: {}, err: {}, check: {}, dist: {}".format(position, currentPosition, currentPosition-position, abs(currentPosition - position) < moveDistance, moveDistance))
+        
+
+        if -200 < delta and 200 > delta:
+            if not self.virtualGoToState:
+                self.Float()
+                print("GOTOV ----- DONE :)")
+            self.virtualGoToState = 0
+            return 0
+
+        # pokud je motor v rozsahu registru, pouzij metodu MOVE
+        elif -1*moveDistance < delta and moveDistance > delta and self.virtualGoToState > 2:
+            print("GOTOV ----- BETWEEN")
+            self.virtualGoToState = 2
+            self.Float()
+            self.Wait()
+            time.sleep(0.2)
+            currentPosition = self.virtual_position()
+            self.Move(currentPosition-position, wait = wait, mode='steps')
+
+        # pokud je motor v rozsahu vnitniho registru, ale zastavil se
+        elif -1*moveDistance < delta and moveDistance > delta:
+            if not self.getStatus().get('BUSY', False):
+                print("Should be false:", self.getStatus().get('BUSY', "Err"))
+                print("GOTOV ----- BETWEEN - repair")
+                self.virtualGoToState = 3
+        
+        elif delta < (-1*moveDistance) and self.virtualGoToState != -3:
+            print("GOTOV ----- ERR -")
+            self.Run(True, speed)
+            self.virtualGoToState = -3
+
+        elif delta > ( 1*moveDistance) and self.virtualGoToState != 3:
+            print("GOTOV ----- ERR +")
+            self.Run(False, speed)
+            self.virtualGoToState = 3
+        
+        '''
+        return -1
+
+
+        '''
+        if self.virtualGoToLastTarget != position:
+            print("\t \t \t \t \t \t \t \t \t \t GOTOV INIT")
+            self.virtualGoToState = 4
+            self.virtualGoToLastTarget = position
+
+        if abs(currentPosition - position) == 0:
+            print("\t \t \t \t \t \t \t \t \t \t GOTOV DONE")
+            self.virtualGoToState = 1
+            return 0
+
+        if abs(currentPosition - position) < moveDistance and self.virtualGoToState != 2:
+            print("\t \t \t \t \t \t \t \t \t \t GOTOV MOVE ..............", position-currentPosition)
+            self.virtualGoToState = 2
+            #self.Run(0, 0)
+            self.Float()
+            time.sleep(2)
+            self.Wait()
+            currentPosition = self.virtual_position()
+            self.Move(position-currentPosition, wait = wait)
+            return 1
+        
+        if self.virtualGoToState > 3:
+            print('\t \t \t \t \t \t \t \t \t \t GOTOV RUN', (currentPosition-position) < 0)
+            self.virtualGoToState = 3
+            self.Run((currentPosition-position) < 0, speed)
+            return 2
+        '''
+
+        return -1
+
+
     def GoUntil(self, direction, speed, ACT = True):
         data = [(int(self._IOspeed(speed)) >> i & 0xff) for i in (16,8,0)]
 
-        self.writeByte(self.CS, (0b10000010 | int(ACT)<<3 | int(direction)<<0))
-        self.writeByte(self.CS, data[0])
-        self.writeByte(self.CS, data[1])
-        self.writeByte(self.CS, data[2])
+        self.writeByte( (0b10000010 | int(ACT)<<3 | int(direction)<<0))
+        self.writeByte( data[0])
+        self.writeByte( data[1])
+        self.writeByte( data[2])
 
         return speed
 
     def ReleaseSW(self, direction = 1, ACT = True):
         ' Go away from Limit Switch '
 
-        self.writeByte(self.CS, (0b10010010 | int(ACT)<<3 | int(direction)<<0))
+        self.writeByte( (0b10010010 | int(ACT)<<3 | int(direction)<<0))
 
         #while self.ReadStatusBit(2) == 1:
-        #    self.writeByte(self.CS, 0b10010010 + int(direction))
+        #    self.writeByte( 0b10010010 + int(direction))
         #    time.sleep(0.25)
 
 
@@ -456,9 +650,9 @@ class axis():
         ' Go to Zero position '
         self.ReleaseSW()
 
-        self.writeByte(self.CS, 0x82 | (self.Dir & 1))       # Go to Zero
-        self.writeByte(self.CS, 0x00)
-        self.writeByte(self.CS, speed)
+        self.writeByte( 0x82 | (self.Dir & 1))       # Go to Zero
+        self.writeByte( 0x00)
+        self.writeByte( speed)
         while self.IsBusy():
             time.sleep(0.25)
         self.ReleaseSW()
@@ -468,22 +662,27 @@ class axis():
         ' Go to Zero position '
         self.ReleaseSW()
 
-        self.writeByte(self.CS, 0x70)       # Go to Zero
-        self.writeByte(self.CS, 0x00)
+        self.writeByte( 0x70)       # Go to Zero
+        self.writeByte( 0x00)
         while self.IsBusy() and wait:
             time.sleep(0.25)
 
 
     def ResetPos(self):
-        self.writeByte(self.CS, 0xD8)       # Reset position
-        self.writeByte(self.CS, 0x00)
+        self.writeByte( 0xD8)       # Reset position
+        self.writeByte( 0x00)
         #self.writeData(self.CS, [0xD8, 0x00])
 
 
-    def Move(self, units = 0, direction = 0, wait = False):
+    def Move(self, units = 0, direction = 0, wait = False, mode = 'units'):
         ' Move some distance units from current position'
 
-        steps = int(abs(self._units2steps(units)))
+        if mode == 'steps':
+            steps = int(units)
+        else:
+            steps = int(abs(self._units2steps(units)))
+        #steps = units
+
         print("Move: steps: %s, units %s" %(steps, units))
 
         direction = bool(direction)
@@ -494,10 +693,10 @@ class axis():
 
         #print "move data arr", data, bin(0b01000000 + int(direction))[2:].zfill(8), bin(data[0])[2:].zfill(8), bin(data[1])[2:].zfill(8), bin(data[2])[2:].zfill(8)
 
-        self.writeByte(self.CS, 0b01000000 + int(direction))
-        self.writeByte(self.CS, data[0])
-        self.writeByte(self.CS, data[1])
-        self.writeByte(self.CS, data[2])
+        self.writeByte( 0b01000000 + int(direction))
+        self.writeByte( data[0])
+        self.writeByte( data[1])
+        self.writeByte( data[2])
 
         time.sleep(0.1)
         if wait: self.Wait()
@@ -517,10 +716,10 @@ class axis():
         #if speed_value > 0x000FFFFF: speed_value = 0x000FFFFF
 
         data = [(speed_value >> i & 0xff) for i in (16,8,0)]
-        self.writeByte(self.CS, 0b01010000 | bool(direction))
-        self.writeByte(self.CS, data[0])
-        self.writeByte(self.CS, data[1])
-        self.writeByte(self.CS, data[2])
+        self.writeByte( 0b01010000 | bool(direction))
+        self.writeByte( data[0])
+        self.writeByte( data[1])
+        self.writeByte( data[2])
 
         print("Run(%s, %s [steps/s])" %(bool(direction), int(speed)))
 
@@ -529,8 +728,8 @@ class axis():
 
     def Float(self):
         ' switch H-bridge to High impedance state '
-        print("switch H-bridge to High impedance state")
-        self.writeByte(self.CS, 0xA0)
+        #print("switch H-bridge to High impedance state")
+        self.writeByte( 0xA0)
 
 
     def ReadStatusReg(self):
@@ -539,10 +738,10 @@ class axis():
         return self.getParam(0x19)
 
         '''
-        self.writeByte(self.CS, 0x20 | 0x19)   # Read from address 0x19 (STATUS)
-        self.writeByte(self.CS, 0x00)
+        self.writeByte( 0x20 | 0x19)   # Read from address 0x19 (STATUS)
+        self.writeByte( 0x00)
         data = [self.readByte()]
-        self.writeByte(self.CS, 0x00)
+        self.writeByte( 0x00)
         data += [self.readByte()]
         return (data[0] << 8 | data[1])
         '''
@@ -550,10 +749,10 @@ class axis():
     def ReadStatusBit(self, bit):
         ' Report given status bit '
 
-        self.writeByte(self.CS, 0x20 | 0x19)   # Read from address 0x19 (STATUS)
-        self.writeByte(self.CS, 0x00)
+        self.writeByte( 0x20 | 0x19)   # Read from address 0x19 (STATUS)
+        self.writeByte( 0x00)
         data = self.readByte() << 8
-        self.writeByte(self.CS, 0x00)
+        self.writeByte( 0x00)
         data |= self.readByte()
 
         return (data >> bit) & 1
@@ -562,25 +761,34 @@ class axis():
     def getStatus(self):
         try:
             #print "GetStatus"
-            self.writeByte(self.CS, 0x20 | 0x19)   # Read from address 0x19 (STATUS)
-            self.writeByte(self.CS, 0x00)
+            self.writeByte( 0x20 | 0x19)   # Read from address 0x19 (STATUS)
+            self.writeByte( 0x00)
             data = [self.readByte()]      # 1st byte
-            self.writeByte(self.CS, 0x00)
+            self.writeByte( 0x00)
             data += [self.readByte()]
             #print data
 
-            self.writeByte(self.CS, 0x20 | 0x04)   # Read from address 0x04 (SPEED)
-            self.writeByte(self.CS, 0x00)
+            self.writeByte( 0x20 | 0x04)   # Read from address 0x04 (SPEED)
+            self.writeByte( 0x00)
             spd = [self.readByte()]
-            self.writeByte(self.CS, 0x00)
+            self.writeByte( 0x00)
             spd += [self.readByte()]
-            self.writeByte(self.CS, 0x00)
+            self.writeByte( 0x00)
             spd += [self.readByte()]
-            #print spd
+            #print('spd: {}'.format(spd))
 
+            spd_c = 0
             pos = self.getPosition()
+            pos2 = self.getPosition()
+            #if abs(pos - pos2) > 10000:
+            #    print(pos, pos2)
+            #    #raise Exception("Driver read error")
+            vpos = self.virtual_position(pos)
+            #if (self.last_pos_date + 10) < time.time():
+            #    spd_c = (self.last_pos - pos)/(self.last_pos_date - time.time())
+            #    self.last_pos = pos
+            #    self.last_pos_date = time.time()
 
-            #print bin(data[0]), bin(data[1]), bin((data[0] << 8)|data[1])[2:].zfill(16), spd[0] << 16 | spd[1] <<8 | spd[2]
             status = dict()
             status = dict([('SCK_MOD',data[0] & 0x80 == 0x80),  #The SCK_MOD bit is an active high flag indicating that the device is working in Step-clock mode. In this case the step-clock signal should be provided through the STCK input pin. The DIR bit indicates the current motor direction
                         ('STEP_LOSS_B',data[0] & 0x40 == 0x40),
@@ -601,20 +809,16 @@ class axis():
                         ('LSByte', data[1]),
                         ('SPEED', self._Speed(spd[0] << 16 | spd[1] <<8 | spd[2])),
                         ('SPEED_RAW', spd[0] << 16 | spd[1] <<8 | spd[2]),
+                        #('SPEED_C', spd_c),
                         ('POSITION', pos),
-                        ('POSITION_CLC', pos/(self.microstepping*1.0)),
+                        ('VIRTUAL_POSITION', vpos),
+                        ('VIRTUAL_ROUND', self.virtualRound),
+                        #('POSITION_CLC', pos/(self.microstepping*1.0)),
                         ('DATETIME', time.time())
                         ])
-                        #('SPEED', 0)])
 
-            if self.sw_range:
-                (minv, maxv) = self.sw_range
-                pos_sw = (pos-minv)/(maxv-minv)*100.0
-                status['POSITION_SW'] = pos_sw
-                if 0 <= pos_sw <= 100: status['IN_RANGE'] = True
-                else: status['IN_RANGE'] = False
-
-            if data[0] == 0:
+            
+            if data[0] == 0 and data[1] == 0:
                 print("i2c problem", bin(data[0]), bin(data[1]))
 
             if self.statusCallback:
@@ -625,59 +829,41 @@ class axis():
 
         except Exception as e:
             print("GetStatusErr>>", e)
-            return (dict())
+            return dict([('DATETIME', time.time())])
 
 
     def setStatusCallback(self, callback = None):
         self.statusCallback = callback
 
-    def ABS_POS(self):
-        return 0x01
-
-
-    def EL_POS(self):
-        return 0x02
-
-
-    def MARK(self):
-        return 0x03
-
-
-    def SPEED(self):
-        return 0x04
-
     def SetSwRange(self, minv, maxv):
         self.sw_range = (float(minv), float(maxv))
 
-
-
-
     def getParam(self, param):          #TODO: toto bude nova verze funkce ReadPara, ReadParam uz nepouzivat. Nyni pouzivejte getParam(param)
-        self.writeByte(self.CS, 0x20 | param)
-        self.writeByte(self.CS, 0x00)
+        self.writeByte( 0x20 | param)
+        self.writeByte( 0x00)
         data0 = self.readByte()           # 1st byte
-        self.writeByte(self.CS, 0x00)
+        self.writeByte( 0x00)
         data1 = self.readByte()           # 2nd byte
-        self.writeByte(self.CS, 0x00)
+        self.writeByte( 0x00)
         data2 = self.readByte()
         return data0 << 16 | data1 <<8 | data2
 
     def setParam(self, param, value):
-        self.writeByte(self.CS, 0x00 | param)
-        self.writeByte(self.CS, (value & 0xff0000) >> 16)
-        self.writeByte(self.CS, (value & 0xff00) >> 8)
-        self.writeByte(self.CS, (value & 0xff) >> 0)
+        self.writeByte( 0x00 | param)
+        self.writeByte( (value & 0xff0000) >> 16)
+        self.writeByte( (value & 0xff00) >> 8)
+        self.writeByte( (value & 0xff) >> 0)
 
     #def ReadParam(self, param):
     #    return getParam(param)
 
     def getPosition(self):
-        self.writeByte(self.CS, 0x20 | 0x01)
-        self.writeByte(self.CS, 0x00)
+        self.writeByte( 0x20 | 0x01)
+        self.writeByte( 0x00)
         data0 = self.readByte()           # 1st byte
-        self.writeByte(self.CS, 0x00)
+        self.writeByte( 0x00)
         data1 = self.readByte()           # 2nd byte
-        self.writeByte(self.CS, 0x00)
+        self.writeByte( 0x00)
         data2 = self.readByte()
 
         #print (data0 << 16 | data1 <<8 | data2)&0x3fffff, '\t', bin(data0 << 16 | data1 <<8 | data2), bin(data0), bin(data1), bin(data2)
@@ -689,8 +875,8 @@ class axis():
     def setStepMode(self, mode):
         self.setParam(0x16, mode[0])
         self.microstepping = mode[1]
-        #self.writeByte(self.CS, self.L6470_STEP_MODE)      # Microstepping
-        #self.writeByte(self.CS, STEP_MODE[0])      # 0x04 - 1/16
+        #self.writeByte( self.L6470_STEP_MODE)      # Microstepping
+        #self.writeByte( STEP_MODE[0])      # 0x04 - 1/16
         #self.microstepping = STEP_MODE[1]
 
 
@@ -714,13 +900,41 @@ class axis():
         #    return True
         #else:
         #    return False
+    
+    def virtual_position(self, position = None):
+        '''
+            Tato funkce bude hlidat owerflow a bude pocitat, kolikrat na kterou stranu je registr přetečen...
+            Je potreba hlidat, aby byla volana dostatecne casto.
+
+            Input:
+               position: current stepper position, optional
+            Output:
+               VirtualPosition
+        '''
+        regLenght = 2**22
+        if not position:
+            position = self.getPosition()
+            #pos2 = self.getPosition()
+            #print("vpos:", position, pos2)
+        lastPosition = self.virtualPositionLast
+        self.virtualPositionLast = position
+
+        if lastPosition > regLenght*2/3 and position < regLenght*1/3:
+            self.virtualRound += 1
+            print("# Buffer pretekl nahoru, pouzivame nasobek {}, Position: {}, Last: {}".format(self.virtualRound, position, lastPosition))
+        
+        elif lastPosition < regLenght*1/3 and position > regLenght*2/3:
+            self.virtualRound -= 1
+            print("# Buffer pretekl dolu, pouzivame nasobek {}, Position: {}, Last: {}".format(self.virtualRound, position, lastPosition))
+
+        return regLenght*self.virtualRound + position
 
 
     def _IOspeed(self, speed):
-        return int((speed * 250e-9)/(2**-28))
+        return int((speed * 250e-9)/(2**-28*self.microstepping))
 
     def _Speed(self, speed, dir = False):
-        return ((speed)*2**-28)/250e-9
+        return ((speed)*2**-28*self.microstepping)/250e-9
 
     def _units2steps(self, units):
         return units * 1.0 * self.SPU * self.microstepping
