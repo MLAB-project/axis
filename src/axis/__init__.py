@@ -336,7 +336,7 @@ class axis:
 
       
     def MaxSpeed(self, speed):
-        ' Setup of maximum speed  - 15.25 to 1560 steps/s'
+        ' Setup of maximum speed  - 15.25 to 15610 steps/s'
         if speed < 15.25: speed = 15.25
         elif speed > 15610: speed = 15610
 
