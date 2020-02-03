@@ -149,7 +149,5 @@ direction
 cd ~/repos
 git clone git@github.com:MLAB-project/axis.git
 cd axis
-```
-```
 sudo python setup.py develop
 ```
