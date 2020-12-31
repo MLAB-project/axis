@@ -216,7 +216,7 @@ class axis():
 
             data = [(speed_value >> i & 0xff) for i in (8,0)]
 
-            self.writeByte( self.L6470_MAX_SPEED)       # Max Speed setup
+            self.writeByte( self.L6470_MIN_SPEED)       # Min Speed setup
             self.writeByte( data[0] | lspd)
             self.writeByte( data[1])
 
@@ -673,6 +673,15 @@ class axis():
         self.writeByte( 0x00)
         #self.writeData(self.CS, [0xD8, 0x00])
 
+    def ResetDevice(self):
+        self.writeByte( 0xC0)       # Reset device
+
+    def SoftStop(self):
+        self.writeByte( 0xB0)       # SoftStop
+
+    def HardStop(self):
+        self.writeByte( 0xB8)       # HardStop
+
 
     def Move(self, units = 0, direction = 0, wait = False, mode = 'units'):
         ' Move some distance units from current position'
@@ -885,7 +894,7 @@ class axis():
 
     def Wait(self, delay = 0.2, maximal_time = False, print_pos = False):
         start = time.time()
-        while self.IsBusy() and (not maximal_time or maximal_time < time.time() - start):
+        while self.IsBusy() and (not maximal_time or maximal_time > time.time() - start):
             time.sleep(delay)
             if print_pos:
                 print("Position: ", self.last_status['POSITION'])
@@ -931,10 +940,10 @@ class axis():
 
 
     def _IOspeed(self, speed):
-        return int((speed * 250e-9)/(2**-28*self.microstepping))
+        return int((speed * 250e-9)/(2**-28))
 
     def _Speed(self, speed, dir = False):
-        return ((speed)*2**-28*self.microstepping)/250e-9
+        return ((speed)*2**-28)/250e-9
 
     def _units2steps(self, units):
         return units * 1.0 * self.SPU * self.microstepping
