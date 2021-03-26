@@ -876,7 +876,10 @@ class axis():
         data2 = self.readByte()
 
         #print (data0 << 16 | data1 <<8 | data2)&0x3fffff, '\t', bin(data0 << 16 | data1 <<8 | data2), bin(data0), bin(data1), bin(data2)
-        return (data0 << 16 | data1 <<8 | data2)&0x3fffff
+        pos_raw = (data0 << 16 | data1 <<8 | data2)&0x3fffff
+        if pos_raw & 0x200000 == 0:
+            return pos_raw
+        return pos_raw - 2**22
 
     def setPosition(self, position):
         return self.setParam(0x01, position)
